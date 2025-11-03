@@ -1,0 +1,49 @@
+<html>
+  <style>
+    body{ 
+      font-size: 15pt;
+      font-family: arial;
+    }
+    table {
+      border-collapse: collapse;
+      width: 100%;
+    }
+    th, td {
+      border: 1px solid #ddd;
+      padding: 8px;
+      text-align: left;
+    }
+    th {
+      background-color: #f2f2f2;
+    }
+  </style>
+
+<body>
+  <h1>Restaurants</h1>
+  
+  <p><a href="/">Home</a></p>
+  
+  {% if restaurants|length == 0 %}
+    <p>No restaurants found.</p>
+  {% else %}
+    <p>Found {{ restaurants|length }} restaurant(s):</p>
+    <table>
+      <tr>
+        <th>ID</th>
+        <th>Name</th>
+        <th>Address</th>
+      </tr>
+      {% for r in restaurants %}
+      <tr>
+        <td>{{ r.id }}</td>
+        <td>{{ r.name }}</td>
+        <td>{{ r.address }}</td>
+      </tr>
+      {% endfor %}
+    </table>
+  {% endif %}
+
+</body>
+
+</html>
+
