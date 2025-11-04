@@ -162,7 +162,7 @@ def index():
 		for result in cursor:
 			names.append(result[0])
 		cursor.close()
-		
+			
 		if len(names) == 0:
 			names = ["No restaurants found in the database."]
 		else:
@@ -246,11 +246,11 @@ def restaurants():
 			# Try to map the columns - adjust based on your actual schema
 			restaurant_dict = {}
 			for i, col in enumerate(columns):
-				if col == 'restaurant_id':
+				if col == 'restaurantid' or col == 'restaurant_id':
 					restaurant_dict['id'] = result[i]
 				elif col == 'name':
 					restaurant_dict['name'] = result[i]
-				elif col == 'address':
+				elif 'address' in col.lower() or 'location' in col.lower():
 					restaurant_dict['address'] = result[i] if result[i] else 'N/A'
 				else:
 					restaurant_dict[col] = result[i] if result[i] else 'N/A'
@@ -275,6 +275,648 @@ def restaurants():
 	
 	context = dict(restaurants=restaurants)
 	return render_template("restaurants.html", **context)
+
+# View restaurant details - shows all relationships
+@app.route('/restaurants/<int:restaurant_id>')
+def restaurant_details(restaurant_id):
+	# Set search path like the home page does
+	g.conn.execute(text(f"SET search_path TO jcw2239, public;"))
+	
+	try:
+		# Get restaurant column names dynamically
+		columns_query = """
+		SELECT column_name 
+		FROM information_schema.columns 
+		WHERE table_schema = 'jcw2239' AND table_name = 'restaurant'
+		ORDER BY ordinal_position;
+		"""
+		cursor = g.conn.execute(text(columns_query))
+		columns = [row[0] for row in cursor]
+		cursor.close()
+		
+		# Find ID and name columns
+		rest_id_col = 'restaurantid'
+		name_col = 'name'
+		address_col = None
+		
+		for col in columns:
+			if 'id' in col.lower() and 'restaurant' in col.lower():
+				rest_id_col = col
+			elif col == 'name':
+				name_col = col
+			elif 'address' in col.lower() or 'location' in col.lower():
+				address_col = col
+				break
+		
+		print(f"Restaurant columns: {columns}")
+		print(f"Address/location column: {address_col}")
+		
+		# Build query with available columns
+		if address_col:
+			select_query = f"SELECT {rest_id_col}, {name_col}, {address_col} FROM restaurant WHERE {rest_id_col} = :id;"
+		else:
+			select_query = f"SELECT {rest_id_col}, {name_col} FROM restaurant WHERE {rest_id_col} = :id;"
+		
+		cursor = g.conn.execute(text(select_query), {'id': restaurant_id})
+		restaurant = cursor.fetchone()
+		cursor.close()
+		
+		if not restaurant:
+			return "Restaurant not found", 404
+		
+		restaurant_info = {
+			'id': restaurant[0],
+			'name': restaurant[1]
+		}
+		
+		# Add address/location if it exists
+		if address_col and len(restaurant) > 2:
+			restaurant_info['address'] = restaurant[2] if restaurant[2] else 'N/A'
+		else:
+			restaurant_info['address'] = 'N/A'
+		
+		# Get dishes for this restaurant
+		dishes_query = "SELECT dishid, name FROM dish WHERE restaurantid = :id ORDER BY name;"
+		cursor = g.conn.execute(text(dishes_query), {'id': restaurant_id})
+		dishes = []
+		for result in cursor:
+			dishes.append({'id': result[0], 'name': result[1]})
+		cursor.close()
+		
+		# Get reviews for this restaurant - use dynamic column discovery
+		# Schema has: ReviewID, Rating, Comment, UserID, RestaurantID (no date column)
+		reviews_query = """
+		SELECT reviewid, userid, rating, comment 
+		FROM review 
+		WHERE restaurantid = :id 
+		ORDER BY reviewid DESC;
+		"""
+		cursor = g.conn.execute(text(reviews_query), {'id': restaurant_id})
+		reviews = []
+		for result in cursor:
+			reviews.append({
+				'id': result[0],
+				'user_id': result[1],
+				'rating': result[2] if result[2] else 'N/A',
+				'text': result[3] if result[3] else 'No text'
+			})
+		cursor.close()
+		
+		# Get cuisines for this restaurant (through restaurantcuisine table)
+		# Schema uses CuisineName (PostgreSQL converts to lowercase: cuisinename)
+		cuisines_query = """
+		SELECT c.cuisineid, c.cuisinename as cuisine_name
+		FROM cuisine c
+		JOIN restaurantcuisine rc ON c.cuisineid = rc.cuisineid
+		WHERE rc.restaurantid = :id
+		ORDER BY c.cuisinename;
+		"""
+		cursor = g.conn.execute(text(cuisines_query), {'id': restaurant_id})
+		cuisines = []
+		for result in cursor:
+			cuisines.append({'id': result[0], 'name': result[1]})
+		cursor.close()
+		
+		# Get orders for this restaurant
+		# Schema has: OrderID, Date, TotalPrice, UserID, RestaurantID
+		# PostgreSQL converts to lowercase: orderid, date, totalprice, userid, restaurantid
+		orders_query = """
+		SELECT orderid, userid, date, totalprice 
+		FROM orders 
+		WHERE restaurantid = :id 
+		ORDER BY date DESC;
+		"""
+		cursor = g.conn.execute(text(orders_query), {'id': restaurant_id})
+		orders = []
+		for result in cursor:
+			orders.append({
+				'id': result[0],
+				'user_id': result[1],
+				'date': result[2] if result[2] else 'N/A',
+				'total': result[3] if result[3] else 'N/A'
+			})
+		cursor.close()
+		
+	except Exception as e:
+		print(f"Error querying restaurant details: {e}")
+		import traceback
+		traceback.print_exc()
+		return f"Error: {e}", 500
+	
+	context = dict(
+		restaurant=restaurant_info,
+		dishes=dishes,
+		reviews=reviews,
+		cuisines=cuisines,
+		orders=orders
+	)
+	return render_template("restaurant_details.html", **context)
+
+
+# View all users
+@app.route('/users')
+def users():
+	g.conn.execute(text("SET search_path TO jcw2239, public;"))
+	
+	try:
+		# Get column names dynamically
+		columns_query = """
+		SELECT column_name 
+		FROM information_schema.columns 
+		WHERE table_schema = 'jcw2239' AND table_name = 'users'
+		ORDER BY ordinal_position;
+		"""
+		cursor = g.conn.execute(text(columns_query))
+		columns = [row[0] for row in cursor]
+		cursor.close()
+		print(f"Users table columns: {columns}")
+		
+		select_query = "SELECT * FROM users ORDER BY username;"
+		cursor = g.conn.execute(text(select_query))
+		users_list = []
+		for result in cursor:
+			user_dict = {}
+			for i, col in enumerate(columns):
+				if col == 'userid' or col == 'user_id':
+					user_dict['id'] = result[i]
+				elif col == 'username':
+					user_dict['username'] = result[i]
+				elif col == 'email':
+					user_dict['email'] = result[i] if result[i] else 'N/A'
+				else:
+					user_dict[col] = result[i] if result[i] else 'N/A'
+			
+			if 'id' not in user_dict:
+				user_dict['id'] = result[0] if len(result) > 0 else 'N/A'
+			if 'username' not in user_dict:
+				user_dict['username'] = result[1] if len(result) > 1 else 'N/A'
+			if 'email' not in user_dict:
+				user_dict['email'] = result[2] if len(result) > 2 else 'N/A'
+			
+			users_list.append(user_dict)
+		cursor.close()
+		print(f"Found {len(users_list)} users")
+	except Exception as e:
+		print(f"Error querying users: {e}")
+		import traceback
+		traceback.print_exc()
+		users_list = []
+	
+	context = dict(users=users_list)
+	return render_template("users.html", **context)
+
+# View all dishes (across all restaurants)
+@app.route('/dishes')
+def dishes():
+	g.conn.execute(text("SET search_path TO jcw2239, public;"))
+	
+	try:
+		# Get column names dynamically
+		columns_query = """
+		SELECT column_name 
+		FROM information_schema.columns 
+		WHERE table_schema = 'jcw2239' AND table_name = 'dish'
+		ORDER BY ordinal_position;
+		"""
+		cursor = g.conn.execute(text(columns_query))
+		columns = [row[0] for row in cursor]
+		cursor.close()
+		print(f"Dish table columns: {columns}")
+		print(f"ALL DISH COLUMNS: {[col for col in columns]}")
+		
+		# Get restaurant column name for JOIN
+		rest_columns_query = """
+		SELECT column_name 
+		FROM information_schema.columns 
+		WHERE table_schema = 'jcw2239' AND table_name = 'restaurant'
+		ORDER BY ordinal_position;
+		"""
+		cursor = g.conn.execute(text(rest_columns_query))
+		rest_columns = [row[0] for row in cursor]
+		cursor.close()
+		
+		# Find the ID column names
+		dish_id_col = 'dishid'
+		rest_id_col = 'restaurantid'
+		for col in columns:
+			if 'id' in col.lower() and 'restaurant' not in col.lower():
+				dish_id_col = col
+				break
+		for col in rest_columns:
+			if 'id' in col.lower() and 'restaurant' in col.lower():
+				rest_id_col = col
+				break
+		
+		# Find restaurant name column
+		rest_name_col = 'name'
+		for col in rest_columns:
+			if col == 'name':
+				rest_name_col = col
+				break
+		
+		# Find the restaurant FK column in dish table
+		rest_fk_col = 'restaurantid'
+		for col in columns:
+			if 'restaurant' in col.lower() and 'id' in col.lower():
+				rest_fk_col = col
+				break
+		
+		# Use JOIN to get restaurant name
+		select_query = f"""
+		SELECT d.*, r.{rest_name_col} as restaurant_name
+		FROM dish d
+		LEFT JOIN restaurant r ON d.{rest_fk_col} = r.{rest_id_col}
+		ORDER BY d.name;
+		"""
+		cursor = g.conn.execute(text(select_query))
+		
+		# Get result columns (including the joined restaurant_name)
+		result_columns = columns + ['restaurant_name']
+		
+		dishes = []
+		for result in cursor:
+			dish_dict = {}
+			# Map all columns first
+			for i, col in enumerate(columns):
+				if col == dish_id_col or col == 'dish_id':
+					dish_dict['id'] = result[i]
+				elif col == 'name':
+					dish_dict['name'] = result[i]
+				elif col == rest_fk_col or ('restaurant' in col.lower() and 'id' in col.lower()):
+					dish_dict['restaurant_id'] = result[i]
+			
+			# Get restaurant_name from the last column (the JOIN result)
+			if len(result) > len(columns):
+				dish_dict['restaurant_name'] = result[len(columns)] if result[len(columns)] else 'N/A'
+			else:
+				dish_dict['restaurant_name'] = 'N/A'
+			
+			# Fallbacks - ensure we have all required fields
+			if 'id' not in dish_dict:
+				dish_dict['id'] = result[0] if len(result) > 0 else 'N/A'
+			if 'name' not in dish_dict:
+				# Find name column
+				for i, col in enumerate(columns):
+					if col == 'name':
+						dish_dict['name'] = result[i] if result[i] else 'N/A'
+						break
+				if 'name' not in dish_dict:
+					dish_dict['name'] = result[1] if len(result) > 1 else 'N/A'
+			if 'restaurant_id' not in dish_dict:
+				for i, col in enumerate(columns):
+					if 'restaurant' in col.lower() and 'id' in col.lower():
+						dish_dict['restaurant_id'] = result[i] if result[i] else 'N/A'
+						break
+			
+			dishes.append(dish_dict)
+		
+		cursor.close()
+		print(f"Found {len(dishes)} dishes")
+	except Exception as e:
+		print(f"Error querying dishes: {e}")
+		import traceback
+		traceback.print_exc()
+		dishes = []
+	
+	context = dict(dishes=dishes)
+	return render_template("dishes.html", **context)
+
+# View all orders (across all restaurants)
+@app.route('/orders')
+def orders():
+	g.conn.execute(text("SET search_path TO jcw2239, public;"))
+	
+	try:
+		# Get column names dynamically
+		columns_query = """
+		SELECT column_name 
+		FROM information_schema.columns 
+		WHERE table_schema = 'jcw2239' AND table_name = 'orders'
+		ORDER BY ordinal_position;
+		"""
+		cursor = g.conn.execute(text(columns_query))
+		columns = [row[0] for row in cursor]
+		cursor.close()
+		print(f"Orders table columns: {columns}")
+		
+		# Get restaurant and user column names for JOINs
+		rest_columns_query = """
+		SELECT column_name 
+		FROM information_schema.columns 
+		WHERE table_schema = 'jcw2239' AND table_name = 'restaurant'
+		ORDER BY ordinal_position;
+		"""
+		cursor = g.conn.execute(text(rest_columns_query))
+		rest_columns = [row[0] for row in cursor]
+		cursor.close()
+		
+		user_columns_query = """
+		SELECT column_name 
+		FROM information_schema.columns 
+		WHERE table_schema = 'jcw2239' AND table_name = 'users'
+		ORDER BY ordinal_position;
+		"""
+		cursor = g.conn.execute(text(user_columns_query))
+		user_columns = [row[0] for row in cursor]
+		cursor.close()
+		
+		# Find ID and name columns
+		order_id_col = 'orderid'
+		rest_id_col = 'restaurantid'
+		user_id_col = 'userid'
+		rest_name_col = 'name'
+		user_name_col = 'username'
+		date_col = 'orderdate'
+		
+		for col in columns:
+			if 'id' in col.lower() and 'order' in col.lower():
+				order_id_col = col
+			elif 'date' in col.lower():
+				date_col = col
+		
+		for col in rest_columns:
+			if 'id' in col.lower() and 'restaurant' in col.lower():
+				rest_id_col = col
+			elif col == 'name':
+				rest_name_col = col
+		
+		for col in user_columns:
+			if 'id' in col.lower() and 'user' in col.lower():
+				user_id_col = col
+			elif 'username' in col.lower() or col == 'name':
+				user_name_col = col
+		
+		# Find FK columns in orders table
+		rest_fk_col = 'restaurantid'
+		user_fk_col = 'userid'
+		for col in columns:
+			if 'restaurant' in col.lower() and 'id' in col.lower():
+				rest_fk_col = col
+			elif 'user' in col.lower() and 'id' in col.lower():
+				user_fk_col = col
+		
+		# Use JOIN to get restaurant and user names
+		select_query = f"""
+		SELECT o.*, r.{rest_name_col} as restaurant_name, u.{user_name_col} as username
+		FROM orders o
+		LEFT JOIN restaurant r ON o.{rest_fk_col} = r.{rest_id_col}
+		LEFT JOIN users u ON o.{user_fk_col} = u.{user_id_col}
+		ORDER BY o.{date_col} DESC;
+		"""
+		cursor = g.conn.execute(text(select_query))
+		
+		orders_list = []
+		for result in cursor:
+			order_dict = {}
+			# Map order columns
+			for i, col in enumerate(columns):
+				if col == order_id_col or col == 'order_id':
+					order_dict['id'] = result[i]
+				elif col == user_fk_col or ('user' in col.lower() and 'id' in col.lower()):
+					order_dict['user_id'] = result[i]
+				elif col == rest_fk_col or ('restaurant' in col.lower() and 'id' in col.lower()):
+					order_dict['restaurant_id'] = result[i]
+				elif 'date' in col.lower():
+					order_dict['date'] = result[i] if result[i] else 'N/A'
+				elif 'total' in col.lower() or 'amount' in col.lower():
+					order_dict['total'] = result[i] if result[i] else 'N/A'
+			
+			# Get restaurant_name and username from JOIN results (last 2 columns)
+			if len(result) > len(columns):
+				order_dict['restaurant_name'] = result[len(columns)] if result[len(columns)] else 'N/A'
+			else:
+				order_dict['restaurant_name'] = 'N/A'
+			if len(result) > len(columns) + 1:
+				order_dict['username'] = result[len(columns) + 1] if result[len(columns) + 1] else 'N/A'
+			else:
+				order_dict['username'] = 'N/A'
+			
+			# Fallbacks
+			if 'id' not in order_dict:
+				order_dict['id'] = result[0] if len(result) > 0 else 'N/A'
+			if 'user_id' not in order_dict:
+				for i, col in enumerate(columns):
+					if 'user' in col.lower() and 'id' in col.lower():
+						order_dict['user_id'] = result[i] if result[i] else 'N/A'
+						break
+			if 'restaurant_id' not in order_dict:
+				for i, col in enumerate(columns):
+					if 'restaurant' in col.lower() and 'id' in col.lower():
+						order_dict['restaurant_id'] = result[i] if result[i] else 'N/A'
+						break
+			if 'date' not in order_dict:
+				for i, col in enumerate(columns):
+					if 'date' in col.lower():
+						order_dict['date'] = result[i] if result[i] else 'N/A'
+						break
+			if 'total' not in order_dict:
+				for i, col in enumerate(columns):
+					if 'total' in col.lower() or 'amount' in col.lower():
+						order_dict['total'] = result[i] if result[i] else 'N/A'
+						break
+			
+			orders_list.append(order_dict)
+		cursor.close()
+		print(f"Found {len(orders_list)} orders")
+	except Exception as e:
+		print(f"Error querying orders: {e}")
+		import traceback
+		traceback.print_exc()
+		orders_list = []
+	
+	context = dict(orders=orders_list)
+	return render_template("orders.html", **context)
+
+# View order details - shows order items
+@app.route('/orders/<int:order_id>')
+def order_details(order_id):
+	g.conn.execute(text(f"SET search_path TO jcw2239, public;"))
+	
+	try:
+		# Get order info
+		# Schema has: OrderID, Date, TotalPrice, UserID, RestaurantID
+		order_query = """
+		SELECT o.orderid, o.userid, o.restaurantid, o.date, o.totalprice,
+		       r.name as restaurant_name, u.username
+		FROM orders o
+		LEFT JOIN restaurant r ON o.restaurantid = r.restaurantid
+		LEFT JOIN users u ON o.userid = u.userid
+		WHERE o.orderid = :id;
+		"""
+		cursor = g.conn.execute(text(order_query), {'id': order_id})
+		order = cursor.fetchone()
+		cursor.close()
+		
+		if not order:
+			return "Order not found", 404
+		
+		order_info = {
+			'id': order[0],
+			'user_id': order[1],
+			'restaurant_id': order[2],
+			'date': order[3] if order[3] else 'N/A',
+			'total': order[4] if order[4] else 'N/A',
+			'restaurant_name': order[5] if order[5] else 'N/A',
+			'username': order[6] if order[6] else 'N/A'
+		}
+		
+		# Get order items
+		items_query = """
+		SELECT oi.orderitemid, oi.dishid, oi.quantity,
+		       d.name as dish_name
+		FROM orderitem oi
+		LEFT JOIN dish d ON oi.dishid = d.dishid
+		WHERE oi.orderid = :id;
+		"""
+		cursor = g.conn.execute(text(items_query), {'id': order_id})
+		items = []
+		for result in cursor:
+			items.append({
+				'id': result[0],
+				'dish_id': result[1],
+				'quantity': result[2],
+				'dish_name': result[3] if result[3] else 'N/A'
+			})
+		cursor.close()
+		
+	except Exception as e:
+		print(f"Error querying order details: {e}")
+		import traceback
+		traceback.print_exc()
+		return f"Error: {e}", 500
+	
+	context = dict(order=order_info, items=items)
+	return render_template("order_details.html", **context)
+
+# View all reviews (across all restaurants)
+@app.route('/reviews')
+def reviews():
+	g.conn.execute(text("SET search_path TO jcw2239, public;"))
+	
+	try:
+		# Get column names dynamically for review table
+		columns_query = """
+		SELECT column_name 
+		FROM information_schema.columns 
+		WHERE table_schema = 'jcw2239' AND table_name = 'review'
+		ORDER BY ordinal_position;
+		"""
+		cursor = g.conn.execute(text(columns_query))
+		columns = [row[0] for row in cursor]
+		cursor.close()
+		print(f"Review table columns: {columns}")
+		
+		# Use JOIN to get restaurant name and username
+		# Schema: ReviewID, Rating, Comment, UserID, RestaurantID (no date)
+		select_query = """
+		SELECT r.reviewid, r.userid, r.restaurantid, r.rating, r.comment,
+		       rest.name as restaurant_name, u.username
+		FROM review r
+		LEFT JOIN restaurant rest ON r.restaurantid = rest.restaurantid
+		LEFT JOIN users u ON r.userid = u.userid
+		ORDER BY r.reviewid DESC;
+		"""
+		cursor = g.conn.execute(text(select_query))
+		reviews_list = []
+		for result in cursor:
+			review_dict = {
+				'id': result[0],
+				'user_id': result[1],
+				'restaurant_id': result[2],
+				'rating': result[3] if result[3] else 'N/A',
+				'text': result[4] if result[4] else 'No text',
+				'restaurant_name': result[5] if result[5] else 'N/A',
+				'username': result[6] if result[6] else 'N/A',
+				'date': 'N/A'  # No date column in schema
+			}
+			reviews_list.append(review_dict)
+		cursor.close()
+		print(f"Found {len(reviews_list)} reviews")
+		if len(reviews_list) > 0:
+			print(f"Sample review: {reviews_list[0]}")
+	except Exception as e:
+		print(f"Error querying reviews: {e}")
+		import traceback
+		traceback.print_exc()
+		reviews_list = []
+	
+	context = dict(reviews=reviews_list)
+	return render_template("reviews.html", **context)
+
+# View all cuisines (global list)
+@app.route('/cuisines')
+def cuisines():
+	g.conn.execute(text("SET search_path TO jcw2239, public;"))
+	
+	try:
+		# Get column names dynamically
+		columns_query = """
+		SELECT column_name 
+		FROM information_schema.columns 
+		WHERE table_schema = 'jcw2239' AND table_name = 'cuisine'
+		ORDER BY ordinal_position;
+		"""
+		cursor = g.conn.execute(text(columns_query))
+		columns = [row[0] for row in cursor]
+		cursor.close()
+		print(f"Cuisine table columns: {columns}")
+		
+		# Find name column for ORDER BY (could be 'name' or 'cuisename')
+		name_col = None
+		for col in columns:
+			if col == 'name' or col == 'cuisename':
+				name_col = col
+				break
+		
+		# If no name column, just order by first column
+		if not name_col and len(columns) > 0:
+			name_col = columns[0]
+		
+		if name_col:
+			select_query = f"SELECT * FROM cuisine ORDER BY {name_col};"
+		else:
+			select_query = "SELECT * FROM cuisine;"
+		
+		cursor = g.conn.execute(text(select_query))
+		cuisines_list = []
+		for result in cursor:
+			cuisine_dict = {}
+			for i, col in enumerate(columns):
+				if col == 'cuisineid' or col == 'cuisine_id':
+					cuisine_dict['id'] = result[i]
+				elif col == 'name' or col == 'cuisename':
+					cuisine_dict['name'] = result[i]
+				else:
+					cuisine_dict[col] = result[i] if result[i] else 'N/A'
+			
+			if 'id' not in cuisine_dict:
+				cuisine_dict['id'] = result[0] if len(result) > 0 else 'N/A'
+			if 'name' not in cuisine_dict:
+				# Try to find name column by position
+				for i, col in enumerate(columns):
+					if col == 'name' or col == 'cuisename':
+						cuisine_dict['name'] = result[i] if result[i] else 'N/A'
+						break
+				if 'name' not in cuisine_dict:
+					# Use first non-ID column as name, or second column
+					if len(result) > 1:
+						cuisine_dict['name'] = result[1] if result[1] else 'N/A'
+					else:
+						cuisine_dict['name'] = 'N/A'
+			
+			cuisines_list.append(cuisine_dict)
+		cursor.close()
+		print(f"Found {len(cuisines_list)} cuisines")
+		if len(cuisines_list) > 0:
+			print(f"Sample cuisine: {cuisines_list[0]}")
+	except Exception as e:
+		print(f"Error querying cuisines: {e}")
+		import traceback
+		traceback.print_exc()
+		cuisines_list = []
+	
+	context = dict(cuisines=cuisines_list)
+	return render_template("cuisines.html", **context)
 
 
 @app.route('/login')

@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+
+{% block content %}
+  <h1>Cuisines</h1>
+  
+  {% if cuisines|length == 0 %}
+    <p>No cuisines found.</p>
+  {% else %}
+    <p>Found {{ cuisines|length }} cuisine(s):</p>
+    <table>
+      <tr>
+        <th>Name</th>
+      </tr>
+      {% for c in cuisines %}
+      <tr>
+        <td>{{ c.name }}</td>
+      </tr>
+      {% endfor %}
+    </table>
+    <p><em>Note: Cuisines are assigned to restaurants. View a restaurant's details to see which cuisines it serves.</em></p>
+  {% endif %}
+{% endblock %}
+

@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+
+{% block content %}
+  <h1>Orders</h1>
+  
+  {% if orders|length == 0 %}
+    <p>No orders found.</p>
+  {% else %}
+    <p>Found {{ orders|length }} order(s):</p>
+    <table>
+      <tr>
+        <th>Order ID</th>
+        <th>User</th>
+        <th>Restaurant</th>
+        <th>Date</th>
+        <th>Total</th>
+        <th>Actions</th>
+      </tr>
+      {% for o in orders %}
+      <tr>
+        <td>{{ o.id }}</td>
+        <td>{{ o.username }}</td>
+        <td><a href="/restaurants/{{ o.restaurant_id }}">{{ o.restaurant_name }}</a></td>
+        <td>{{ o.date }}</td>
+        <td>{{ o.total }}</td>
+        <td><a href="/orders/{{ o.id }}">View Details</a></td>
+      </tr>
+      {% endfor %}
+    </table>
+  {% endif %}
+{% endblock %}
+

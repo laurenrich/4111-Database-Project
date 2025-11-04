@@ -1,0 +1,80 @@
+<html>
+  <head>
+    <style>
+      body { 
+        font-size: 15pt;
+        font-family: arial;
+        margin: 20px;
+      }
+      .nav {
+        background-color: #f0f0f0;
+        padding: 15px;
+        margin-bottom: 20px;
+        border: 1px solid #ccc;
+      }
+      .nav a {
+        margin-right: 20px;
+        text-decoration: none;
+        color: #0066cc;
+        font-weight: bold;
+      }
+      .nav a:hover {
+        text-decoration: underline;
+      }
+      h1 {
+        color: #333;
+      }
+      table {
+        border-collapse: collapse;
+        width: 100%;
+        margin: 20px 0;
+      }
+      th, td {
+        border: 1px solid #ddd;
+        padding: 10px;
+        text-align: left;
+      }
+      th {
+        background-color: #f2f2f2;
+        font-weight: bold;
+      }
+      form {
+        margin: 20px 0;
+        padding: 15px;
+        border: 1px solid #ddd;
+        background-color: #f9f9f9;
+      }
+      form label {
+        display: inline-block;
+        width: 150px;
+        margin: 5px 0;
+      }
+      form input, form select, form textarea {
+        margin: 5px 0;
+        padding: 5px;
+      }
+      .error {
+        color: red;
+        margin: 10px 0;
+      }
+      .success {
+        color: green;
+        margin: 10px 0;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="nav">
+      <a href="/">Home</a> |
+      <a href="/restaurants">Restaurants</a> |
+      <a href="/cuisines">Cuisines</a> |
+      <a href="/dishes">Dishes</a> |
+      <a href="/users">Users</a> |
+      <a href="/orders">Orders</a> |
+      <a href="/reviews">Reviews</a>
+    </div>
+    
+    {% block content %}{% endblock %}
+  </body>
+</html>
+

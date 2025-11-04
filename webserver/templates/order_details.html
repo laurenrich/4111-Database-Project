@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+
+{% block content %}
+  <h1>Order #{{ order.id }}</h1>
+  <p><strong>User:</strong> {{ order.username }} (ID: {{ order.user_id }})</p>
+  <p><strong>Restaurant:</strong> <a href="/restaurants/{{ order.restaurant_id }}">{{ order.restaurant_name }}</a></p>
+  <p><strong>Date:</strong> {{ order.date }}</p>
+  <p><strong>Total Amount:</strong> {{ order.total }}</p>
+  
+  <p><a href="/orders">← Back to Orders</a></p>
+  
+  <h2>Order Items</h2>
+  {% if items|length == 0 %}
+    <p>No items in this order.</p>
+  {% else %}
+    <table>
+      <tr>
+        <th>Dish</th>
+        <th>Quantity</th>
+      </tr>
+      {% for item in items %}
+      <tr>
+        <td>{{ item.dish_name }}</td>
+        <td>{{ item.quantity }}</td>
+      </tr>
+      {% endfor %}
+    </table>
+  {% endif %}
+{% endblock %}
+

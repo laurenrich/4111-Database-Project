@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+
+{% block content %}
+  <h1>Reviews</h1>
+  
+  {% if reviews|length == 0 %}
+    <p>No reviews found.</p>
+  {% else %}
+    <p>Found {{ reviews|length }} review(s):</p>
+    <table>
+      <tr>
+        <th>User</th>
+        <th>Restaurant</th>
+        <th>Rating</th>
+        <th>Review</th>
+      </tr>
+      {% for r in reviews %}
+      <tr>
+        <td>{{ r.username }}</td>
+        <td><a href="/restaurants/{{ r.restaurant_id }}">{{ r.restaurant_name }}</a></td>
+        <td>{{ r.rating }}</td>
+        <td>{{ r.text }}</td>
+      </tr>
+      {% endfor %}
+    </table>
+  {% endif %}
+{% endblock %}
+

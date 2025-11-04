@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+
+{% block content %}
+  <h1>Dishes</h1>
+  
+  {% if dishes|length == 0 %}
+    <p>No dishes found.</p>
+  {% else %}
+    <p>Found {{ dishes|length }} dish(es):</p>
+    <table>
+      <tr>
+        <th>Name</th>
+        <th>Restaurant</th>
+      </tr>
+      {% for d in dishes %}
+      <tr>
+        <td>{{ d.name }}</td>
+        <td>
+          {% if d.restaurant_id %}
+            <a href="/restaurants/{{ d.restaurant_id }}">{{ d.restaurant_name }}</a>
+          {% else %}
+            {{ d.restaurant_name if d.restaurant_name else 'N/A' }}
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </table>
+  {% endif %}
+{% endblock %}
+

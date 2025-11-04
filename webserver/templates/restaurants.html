@@ -1,27 +1,9 @@
-<html>
-  <style>
-    body{ 
-      font-size: 15pt;
-      font-family: arial;
-    }
-    table {
-      border-collapse: collapse;
-      width: 100%;
-    }
-    th, td {
-      border: 1px solid #ddd;
-      padding: 8px;
-      text-align: left;
-    }
-    th {
-      background-color: #f2f2f2;
-    }
-  </style>
+{% extends "base.html" %}
 
-<body>
+{% block content %}
   <h1>Restaurants</h1>
   
-  <p><a href="/">Home</a></p>
+  <p><a href="/restaurants/add">Add New Restaurant</a></p>
   
   {% if restaurants|length == 0 %}
     <p>No restaurants found.</p>
@@ -29,21 +11,20 @@
     <p>Found {{ restaurants|length }} restaurant(s):</p>
     <table>
       <tr>
-        <th>ID</th>
         <th>Name</th>
         <th>Address</th>
+        <th>Actions</th>
       </tr>
       {% for r in restaurants %}
       <tr>
-        <td>{{ r.id }}</td>
         <td>{{ r.name }}</td>
         <td>{{ r.address }}</td>
+        <td>
+          <a href="/restaurants/{{ r.id }}">View Details</a>
+        </td>
       </tr>
       {% endfor %}
     </table>
   {% endif %}
-
-</body>
-
-</html>
+{% endblock %}
 

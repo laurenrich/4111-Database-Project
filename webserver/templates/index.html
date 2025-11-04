@@ -1,24 +1,23 @@
-<html>
-  <style>
-    body{ 
-      font-size: 15pt;
-      font-family: arial;
-    }
-  </style>
+{% extends "base.html" %}
 
-
-<body>
-  <h1>Restaurant Database</h1>
+{% block content %}
+  <h1>Restaurant Database System</h1>
+  <p>Welcome! Use the navigation above to browse all entities and relationships.</p>
   
+  <h2>Database Overview</h2>
   <div>
     {% for n in data %}
     <div>{{n}}</div>
     {% endfor %}
-  </div>
-
-<p><a href="/restaurants">View All Restaurants</a></p>
-
-</body>
-
-
-</html>
+  </div> 
+  
+  <h2>Quick Links</h2>
+  <ul>
+    <li><a href="/restaurants">View All Restaurants</a></li>
+    <li><a href="/cuisines">View All Cuisines</a></li>
+    <li><a href="/dishes">View All Dishes</a></li>
+    <li><a href="/users">View All Users</a></li>
+    <li><a href="/orders">View All Orders</a></li>
+    <li><a href="/reviews">View All Reviews</a></li>
+  </ul>
+{% endblock %}

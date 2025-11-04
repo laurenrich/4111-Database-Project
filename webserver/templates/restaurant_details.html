@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+
+{% block content %}
+  <p><a href="/restaurants">← Back to Restaurants</a></p>
+  
+  <h1>{{ restaurant.name }}</h1>
+  <p><strong>Address:</strong> {{ restaurant.address }}</p>
+  
+  <h2>Cuisines</h2>
+  {% if cuisines|length == 0 %}
+    <p>No cuisines assigned.</p>
+  {% else %}
+    <table>
+      <tr>
+        <th>Name</th>
+        <th>Actions</th>
+      </tr>
+      {% for c in cuisines %}
+      <tr>
+        <td>{{ c.name }}</td>
+        <td><a href="/cuisines">View Details</a></td>
+      </tr>
+      {% endfor %}
+    </table>
+  {% endif %}
+  
+  <h2>Dishes ({{ dishes|length }})</h2>
+  {% if dishes|length == 0 %}
+    <p>No dishes available.</p>
+  {% else %}
+    <table>
+      <tr>
+        <th>Name</th>
+        <th>Actions</th>
+      </tr>
+      {% for d in dishes %}
+      <tr>
+        <td>{{ d.name }}</td>
+        <td><a href="/dishes">View Details</a></td>
+      </tr>
+      {% endfor %}
+    </table>
+  {% endif %}
+  
+  <h2>Reviews ({{ reviews|length }})</h2>
+  {% if reviews|length == 0 %}
+    <p>No reviews yet.</p>
+  {% else %}
+    <table>
+      <tr>
+        <th>User ID</th>
+        <th>Rating</th>
+        <th>Review</th>
+        <th>Actions</th>
+      </tr>
+      {% for r in reviews %}
+      <tr>
+        <td>{{ r.user_id }}</td>
+        <td>{{ r.rating }}</td>
+        <td>{{ r.text }}</td>
+        <td><a href="/reviews">View Details</a></td>
+      </tr>
+      {% endfor %}
+    </table>
+  {% endif %}
+  
+  <h2>Orders ({{ orders|length }})</h2>
+  {% if orders|length == 0 %}
+    <p>No orders yet.</p>
+  {% else %}
+    <table>
+      <tr>
+        <th>Order ID</th>
+        <th>User ID</th>
+        <th>Date</th>
+        <th>Total Amount</th>
+        <th>Actions</th>
+      </tr>
+      {% for o in orders %}
+      <tr>
+        <td>{{ o.id }}</td>
+        <td>{{ o.user_id }}</td>
+        <td>{{ o.date }}</td>
+        <td>{{ o.total }}</td>
+        <td><a href="/orders/{{ o.id }}">View Details</a></td>
+      </tr>
+      {% endfor %}
+    </table>
+  {% endif %}
+  
+  <p><a href="/restaurants/{{ restaurant.id }}/add-review">Add Review</a> | 
+     <a href="/restaurants/{{ restaurant.id }}/add-dish">Add Dish</a> | 
+     <a href="/restaurants/{{ restaurant.id }}/add-order">Create Order</a></p>
+{% endblock %}
+
