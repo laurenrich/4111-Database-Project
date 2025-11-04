@@ -9,13 +9,13 @@
     <p>Found {{ users|length }} user(s):</p>
     <table>
       <tr>
+        <th>User ID</th>
         <th>Username</th>
-        <th>Email</th>
       </tr>
       {% for u in users %}
       <tr>
+        <td>{{ u.id }}</td>
         <td>{{ u.username }}</td>
-        <td>{{ u.email }}</td>
       </tr>
       {% endfor %}
     </table>

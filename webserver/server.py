@@ -12,10 +12,11 @@ import os
 # accessible as a variable in index.html:
 from sqlalchemy import *
 from sqlalchemy.pool import NullPool
-from flask import Flask, request, render_template, g, redirect, Response, abort
+from flask import Flask, request, render_template, g, redirect, Response, abort, session
 
 tmpl_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'templates')
 app = Flask(__name__, template_folder=tmpl_dir)
+app.secret_key = 'your-secret-key-change-this-in-production'  # Needed for sessions
 
 
 #
@@ -226,44 +227,17 @@ def restaurants():
 	g.conn.execute(text("SET search_path TO jcw2239, public;"))
 	
 	try:
-		# First, let's see what columns exist in the restaurant table
-		columns_query = """
-		SELECT column_name 
-		FROM information_schema.columns 
-		WHERE table_schema = 'jcw2239' AND table_name = 'restaurant'
-		ORDER BY ordinal_position;
-		"""
-		cursor = g.conn.execute(text(columns_query))
-		columns = [row[0] for row in cursor]
-		cursor.close()
-		print(f"Restaurant table columns: {columns}")
-		
-		# Query all restaurants - try to get all columns first
-		select_query = "SELECT * FROM restaurant ORDER BY name;"
+		# Schema has: RestaurantID, Name, Location, PriceRange
+		# PostgreSQL converts to lowercase: restaurantid, name, location, pricerange
+		select_query = "SELECT restaurantid, name, location FROM restaurant ORDER BY name;"
 		cursor = g.conn.execute(text(select_query))
 		restaurants = []
 		for result in cursor:
-			# Try to map the columns - adjust based on your actual schema
-			restaurant_dict = {}
-			for i, col in enumerate(columns):
-				if col == 'restaurantid' or col == 'restaurant_id':
-					restaurant_dict['id'] = result[i]
-				elif col == 'name':
-					restaurant_dict['name'] = result[i]
-				elif 'address' in col.lower() or 'location' in col.lower():
-					restaurant_dict['address'] = result[i] if result[i] else 'N/A'
-				else:
-					restaurant_dict[col] = result[i] if result[i] else 'N/A'
-			
-			# Fallback: if we don't have the expected columns, just use what we have
-			if 'id' not in restaurant_dict:
-				restaurant_dict['id'] = result[0] if len(result) > 0 else 'N/A'
-			if 'name' not in restaurant_dict:
-				restaurant_dict['name'] = result[1] if len(result) > 1 else 'N/A'
-			if 'address' not in restaurant_dict:
-				restaurant_dict['address'] = result[2] if len(result) > 2 else 'N/A'
-			
-			restaurants.append(restaurant_dict)
+			restaurants.append({
+				'id': result[0],
+				'name': result[1],
+				'address': result[2] if result[2] else 'N/A'
+			})
 		cursor.close()
 		
 		print(f"Found {len(restaurants)} restaurants")
@@ -283,40 +257,9 @@ def restaurant_details(restaurant_id):
 	g.conn.execute(text(f"SET search_path TO jcw2239, public;"))
 	
 	try:
-		# Get restaurant column names dynamically
-		columns_query = """
-		SELECT column_name 
-		FROM information_schema.columns 
-		WHERE table_schema = 'jcw2239' AND table_name = 'restaurant'
-		ORDER BY ordinal_position;
-		"""
-		cursor = g.conn.execute(text(columns_query))
-		columns = [row[0] for row in cursor]
-		cursor.close()
-		
-		# Find ID and name columns
-		rest_id_col = 'restaurantid'
-		name_col = 'name'
-		address_col = None
-		
-		for col in columns:
-			if 'id' in col.lower() and 'restaurant' in col.lower():
-				rest_id_col = col
-			elif col == 'name':
-				name_col = col
-			elif 'address' in col.lower() or 'location' in col.lower():
-				address_col = col
-				break
-		
-		print(f"Restaurant columns: {columns}")
-		print(f"Address/location column: {address_col}")
-		
-		# Build query with available columns
-		if address_col:
-			select_query = f"SELECT {rest_id_col}, {name_col}, {address_col} FROM restaurant WHERE {rest_id_col} = :id;"
-		else:
-			select_query = f"SELECT {rest_id_col}, {name_col} FROM restaurant WHERE {rest_id_col} = :id;"
-		
+		# Schema has: RestaurantID, Name, Location, PriceRange
+		# PostgreSQL converts to lowercase: restaurantid, name, location, pricerange
+		select_query = "SELECT restaurantid, name, location FROM restaurant WHERE restaurantid = :id;"
 		cursor = g.conn.execute(text(select_query), {'id': restaurant_id})
 		restaurant = cursor.fetchone()
 		cursor.close()
@@ -326,14 +269,9 @@ def restaurant_details(restaurant_id):
 		
 		restaurant_info = {
 			'id': restaurant[0],
-			'name': restaurant[1]
+			'name': restaurant[1],
+			'address': restaurant[2] if restaurant[2] else 'N/A'
 		}
-		
-		# Add address/location if it exists
-		if address_col and len(restaurant) > 2:
-			restaurant_info['address'] = restaurant[2] if restaurant[2] else 'N/A'
-		else:
-			restaurant_info['address'] = 'N/A'
 		
 		# Get dishes for this restaurant
 		dishes_query = "SELECT dishid, name FROM dish WHERE restaurantid = :id ORDER BY name;"
@@ -343,7 +281,7 @@ def restaurant_details(restaurant_id):
 			dishes.append({'id': result[0], 'name': result[1]})
 		cursor.close()
 		
-		# Get reviews for this restaurant - use dynamic column discovery
+		# Get reviews for this restaurant
 		# Schema has: ReviewID, Rating, Comment, UserID, RestaurantID (no date column)
 		reviews_query = """
 		SELECT reviewid, userid, rating, comment 
@@ -419,41 +357,16 @@ def users():
 	g.conn.execute(text("SET search_path TO jcw2239, public;"))
 	
 	try:
-		# Get column names dynamically
-		columns_query = """
-		SELECT column_name 
-		FROM information_schema.columns 
-		WHERE table_schema = 'jcw2239' AND table_name = 'users'
-		ORDER BY ordinal_position;
-		"""
-		cursor = g.conn.execute(text(columns_query))
-		columns = [row[0] for row in cursor]
-		cursor.close()
-		print(f"Users table columns: {columns}")
-		
-		select_query = "SELECT * FROM users ORDER BY username;"
+		# Schema has: UserID, Name, Username, Password, Role (NO email)
+		# PostgreSQL converts to lowercase: userid, name, username, password, role
+		select_query = "SELECT userid, username FROM users ORDER BY username;"
 		cursor = g.conn.execute(text(select_query))
 		users_list = []
 		for result in cursor:
-			user_dict = {}
-			for i, col in enumerate(columns):
-				if col == 'userid' or col == 'user_id':
-					user_dict['id'] = result[i]
-				elif col == 'username':
-					user_dict['username'] = result[i]
-				elif col == 'email':
-					user_dict['email'] = result[i] if result[i] else 'N/A'
-				else:
-					user_dict[col] = result[i] if result[i] else 'N/A'
-			
-			if 'id' not in user_dict:
-				user_dict['id'] = result[0] if len(result) > 0 else 'N/A'
-			if 'username' not in user_dict:
-				user_dict['username'] = result[1] if len(result) > 1 else 'N/A'
-			if 'email' not in user_dict:
-				user_dict['email'] = result[2] if len(result) > 2 else 'N/A'
-			
-			users_list.append(user_dict)
+			users_list.append({
+				'id': result[0],
+				'username': result[1]
+			})
 		cursor.close()
 		print(f"Found {len(users_list)} users")
 	except Exception as e:
@@ -471,104 +384,24 @@ def dishes():
 	g.conn.execute(text("SET search_path TO jcw2239, public;"))
 	
 	try:
-		# Get column names dynamically
-		columns_query = """
-		SELECT column_name 
-		FROM information_schema.columns 
-		WHERE table_schema = 'jcw2239' AND table_name = 'dish'
-		ORDER BY ordinal_position;
-		"""
-		cursor = g.conn.execute(text(columns_query))
-		columns = [row[0] for row in cursor]
-		cursor.close()
-		print(f"Dish table columns: {columns}")
-		print(f"ALL DISH COLUMNS: {[col for col in columns]}")
-		
-		# Get restaurant column name for JOIN
-		rest_columns_query = """
-		SELECT column_name 
-		FROM information_schema.columns 
-		WHERE table_schema = 'jcw2239' AND table_name = 'restaurant'
-		ORDER BY ordinal_position;
-		"""
-		cursor = g.conn.execute(text(rest_columns_query))
-		rest_columns = [row[0] for row in cursor]
-		cursor.close()
-		
-		# Find the ID column names
-		dish_id_col = 'dishid'
-		rest_id_col = 'restaurantid'
-		for col in columns:
-			if 'id' in col.lower() and 'restaurant' not in col.lower():
-				dish_id_col = col
-				break
-		for col in rest_columns:
-			if 'id' in col.lower() and 'restaurant' in col.lower():
-				rest_id_col = col
-				break
-		
-		# Find restaurant name column
-		rest_name_col = 'name'
-		for col in rest_columns:
-			if col == 'name':
-				rest_name_col = col
-				break
-		
-		# Find the restaurant FK column in dish table
-		rest_fk_col = 'restaurantid'
-		for col in columns:
-			if 'restaurant' in col.lower() and 'id' in col.lower():
-				rest_fk_col = col
-				break
-		
-		# Use JOIN to get restaurant name
-		select_query = f"""
-		SELECT d.*, r.{rest_name_col} as restaurant_name
+		# Schema has: DishID, Name, Ingredients, RestaurantID
+		# PostgreSQL converts to lowercase: dishid, name, ingredients, restaurantid
+		select_query = """
+		SELECT d.dishid, d.name, d.restaurantid, r.name as restaurant_name
 		FROM dish d
-		LEFT JOIN restaurant r ON d.{rest_fk_col} = r.{rest_id_col}
+		LEFT JOIN restaurant r ON d.restaurantid = r.restaurantid
 		ORDER BY d.name;
 		"""
 		cursor = g.conn.execute(text(select_query))
 		
-		# Get result columns (including the joined restaurant_name)
-		result_columns = columns + ['restaurant_name']
-		
 		dishes = []
 		for result in cursor:
-			dish_dict = {}
-			# Map all columns first
-			for i, col in enumerate(columns):
-				if col == dish_id_col or col == 'dish_id':
-					dish_dict['id'] = result[i]
-				elif col == 'name':
-					dish_dict['name'] = result[i]
-				elif col == rest_fk_col or ('restaurant' in col.lower() and 'id' in col.lower()):
-					dish_dict['restaurant_id'] = result[i]
-			
-			# Get restaurant_name from the last column (the JOIN result)
-			if len(result) > len(columns):
-				dish_dict['restaurant_name'] = result[len(columns)] if result[len(columns)] else 'N/A'
-			else:
-				dish_dict['restaurant_name'] = 'N/A'
-			
-			# Fallbacks - ensure we have all required fields
-			if 'id' not in dish_dict:
-				dish_dict['id'] = result[0] if len(result) > 0 else 'N/A'
-			if 'name' not in dish_dict:
-				# Find name column
-				for i, col in enumerate(columns):
-					if col == 'name':
-						dish_dict['name'] = result[i] if result[i] else 'N/A'
-						break
-				if 'name' not in dish_dict:
-					dish_dict['name'] = result[1] if len(result) > 1 else 'N/A'
-			if 'restaurant_id' not in dish_dict:
-				for i, col in enumerate(columns):
-					if 'restaurant' in col.lower() and 'id' in col.lower():
-						dish_dict['restaurant_id'] = result[i] if result[i] else 'N/A'
-						break
-			
-			dishes.append(dish_dict)
+			dishes.append({
+				'id': result[0],
+				'name': result[1],
+				'restaurant_id': result[2],
+				'restaurant_name': result[3] if result[3] else 'N/A'
+			})
 		
 		cursor.close()
 		print(f"Found {len(dishes)} dishes")
@@ -587,136 +420,31 @@ def orders():
 	g.conn.execute(text("SET search_path TO jcw2239, public;"))
 	
 	try:
-		# Get column names dynamically
-		columns_query = """
-		SELECT column_name 
-		FROM information_schema.columns 
-		WHERE table_schema = 'jcw2239' AND table_name = 'orders'
-		ORDER BY ordinal_position;
-		"""
-		cursor = g.conn.execute(text(columns_query))
-		columns = [row[0] for row in cursor]
-		cursor.close()
-		print(f"Orders table columns: {columns}")
-		
-		# Get restaurant and user column names for JOINs
-		rest_columns_query = """
-		SELECT column_name 
-		FROM information_schema.columns 
-		WHERE table_schema = 'jcw2239' AND table_name = 'restaurant'
-		ORDER BY ordinal_position;
-		"""
-		cursor = g.conn.execute(text(rest_columns_query))
-		rest_columns = [row[0] for row in cursor]
-		cursor.close()
-		
-		user_columns_query = """
-		SELECT column_name 
-		FROM information_schema.columns 
-		WHERE table_schema = 'jcw2239' AND table_name = 'users'
-		ORDER BY ordinal_position;
-		"""
-		cursor = g.conn.execute(text(user_columns_query))
-		user_columns = [row[0] for row in cursor]
-		cursor.close()
-		
-		# Find ID and name columns
-		order_id_col = 'orderid'
-		rest_id_col = 'restaurantid'
-		user_id_col = 'userid'
-		rest_name_col = 'name'
-		user_name_col = 'username'
-		date_col = 'orderdate'
-		
-		for col in columns:
-			if 'id' in col.lower() and 'order' in col.lower():
-				order_id_col = col
-			elif 'date' in col.lower():
-				date_col = col
-		
-		for col in rest_columns:
-			if 'id' in col.lower() and 'restaurant' in col.lower():
-				rest_id_col = col
-			elif col == 'name':
-				rest_name_col = col
-		
-		for col in user_columns:
-			if 'id' in col.lower() and 'user' in col.lower():
-				user_id_col = col
-			elif 'username' in col.lower() or col == 'name':
-				user_name_col = col
-		
-		# Find FK columns in orders table
-		rest_fk_col = 'restaurantid'
-		user_fk_col = 'userid'
-		for col in columns:
-			if 'restaurant' in col.lower() and 'id' in col.lower():
-				rest_fk_col = col
-			elif 'user' in col.lower() and 'id' in col.lower():
-				user_fk_col = col
-		
-		# Use JOIN to get restaurant and user names
-		select_query = f"""
-		SELECT o.*, r.{rest_name_col} as restaurant_name, u.{user_name_col} as username
+		# Schema has: OrderID, Date, TotalPrice, UserID, RestaurantID
+		# PostgreSQL converts to lowercase: orderid, date, totalprice, userid, restaurantid
+		select_query = """
+		SELECT o.orderid, o.userid, o.restaurantid, o.date, o.totalprice,
+		       r.name as restaurant_name, u.username
 		FROM orders o
-		LEFT JOIN restaurant r ON o.{rest_fk_col} = r.{rest_id_col}
-		LEFT JOIN users u ON o.{user_fk_col} = u.{user_id_col}
-		ORDER BY o.{date_col} DESC;
+		LEFT JOIN restaurant r ON o.restaurantid = r.restaurantid
+		LEFT JOIN users u ON o.userid = u.userid
+		ORDER BY o.date DESC;
 		"""
 		cursor = g.conn.execute(text(select_query))
 		
 		orders_list = []
 		for result in cursor:
-			order_dict = {}
-			# Map order columns
-			for i, col in enumerate(columns):
-				if col == order_id_col or col == 'order_id':
-					order_dict['id'] = result[i]
-				elif col == user_fk_col or ('user' in col.lower() and 'id' in col.lower()):
-					order_dict['user_id'] = result[i]
-				elif col == rest_fk_col or ('restaurant' in col.lower() and 'id' in col.lower()):
-					order_dict['restaurant_id'] = result[i]
-				elif 'date' in col.lower():
-					order_dict['date'] = result[i] if result[i] else 'N/A'
-				elif 'total' in col.lower() or 'amount' in col.lower():
-					order_dict['total'] = result[i] if result[i] else 'N/A'
-			
-			# Get restaurant_name and username from JOIN results (last 2 columns)
-			if len(result) > len(columns):
-				order_dict['restaurant_name'] = result[len(columns)] if result[len(columns)] else 'N/A'
-			else:
-				order_dict['restaurant_name'] = 'N/A'
-			if len(result) > len(columns) + 1:
-				order_dict['username'] = result[len(columns) + 1] if result[len(columns) + 1] else 'N/A'
-			else:
-				order_dict['username'] = 'N/A'
-			
-			# Fallbacks
-			if 'id' not in order_dict:
-				order_dict['id'] = result[0] if len(result) > 0 else 'N/A'
-			if 'user_id' not in order_dict:
-				for i, col in enumerate(columns):
-					if 'user' in col.lower() and 'id' in col.lower():
-						order_dict['user_id'] = result[i] if result[i] else 'N/A'
-						break
-			if 'restaurant_id' not in order_dict:
-				for i, col in enumerate(columns):
-					if 'restaurant' in col.lower() and 'id' in col.lower():
-						order_dict['restaurant_id'] = result[i] if result[i] else 'N/A'
-						break
-			if 'date' not in order_dict:
-				for i, col in enumerate(columns):
-					if 'date' in col.lower():
-						order_dict['date'] = result[i] if result[i] else 'N/A'
-						break
-			if 'total' not in order_dict:
-				for i, col in enumerate(columns):
-					if 'total' in col.lower() or 'amount' in col.lower():
-						order_dict['total'] = result[i] if result[i] else 'N/A'
-						break
-			
-			orders_list.append(order_dict)
+			orders_list.append({
+				'id': result[0],
+				'user_id': result[1],
+				'restaurant_id': result[2],
+				'date': result[3] if result[3] else 'N/A',
+				'total': result[4] if result[4] else 'N/A',
+				'restaurant_name': result[5] if result[5] else 'N/A',
+				'username': result[6] if result[6] else 'N/A'
+			})
 		cursor.close()
+		
 		print(f"Found {len(orders_list)} orders")
 	except Exception as e:
 		print(f"Error querying orders: {e}")
@@ -794,20 +522,8 @@ def reviews():
 	g.conn.execute(text("SET search_path TO jcw2239, public;"))
 	
 	try:
-		# Get column names dynamically for review table
-		columns_query = """
-		SELECT column_name 
-		FROM information_schema.columns 
-		WHERE table_schema = 'jcw2239' AND table_name = 'review'
-		ORDER BY ordinal_position;
-		"""
-		cursor = g.conn.execute(text(columns_query))
-		columns = [row[0] for row in cursor]
-		cursor.close()
-		print(f"Review table columns: {columns}")
-		
-		# Use JOIN to get restaurant name and username
 		# Schema: ReviewID, Rating, Comment, UserID, RestaurantID (no date)
+		# PostgreSQL converts to lowercase: reviewid, rating, comment, userid, restaurantid
 		select_query = """
 		SELECT r.reviewid, r.userid, r.restaurantid, r.rating, r.comment,
 		       rest.name as restaurant_name, u.username
@@ -849,62 +565,16 @@ def cuisines():
 	g.conn.execute(text("SET search_path TO jcw2239, public;"))
 	
 	try:
-		# Get column names dynamically
-		columns_query = """
-		SELECT column_name 
-		FROM information_schema.columns 
-		WHERE table_schema = 'jcw2239' AND table_name = 'cuisine'
-		ORDER BY ordinal_position;
-		"""
-		cursor = g.conn.execute(text(columns_query))
-		columns = [row[0] for row in cursor]
-		cursor.close()
-		print(f"Cuisine table columns: {columns}")
-		
-		# Find name column for ORDER BY (could be 'name' or 'cuisename')
-		name_col = None
-		for col in columns:
-			if col == 'name' or col == 'cuisename':
-				name_col = col
-				break
-		
-		# If no name column, just order by first column
-		if not name_col and len(columns) > 0:
-			name_col = columns[0]
-		
-		if name_col:
-			select_query = f"SELECT * FROM cuisine ORDER BY {name_col};"
-		else:
-			select_query = "SELECT * FROM cuisine;"
-		
+		# Schema has: CuisineID, CuisineName
+		# PostgreSQL converts to lowercase: cuisineid, cuisinename
+		select_query = "SELECT cuisineid, cuisinename FROM cuisine ORDER BY cuisinename;"
 		cursor = g.conn.execute(text(select_query))
 		cuisines_list = []
 		for result in cursor:
-			cuisine_dict = {}
-			for i, col in enumerate(columns):
-				if col == 'cuisineid' or col == 'cuisine_id':
-					cuisine_dict['id'] = result[i]
-				elif col == 'name' or col == 'cuisename':
-					cuisine_dict['name'] = result[i]
-				else:
-					cuisine_dict[col] = result[i] if result[i] else 'N/A'
-			
-			if 'id' not in cuisine_dict:
-				cuisine_dict['id'] = result[0] if len(result) > 0 else 'N/A'
-			if 'name' not in cuisine_dict:
-				# Try to find name column by position
-				for i, col in enumerate(columns):
-					if col == 'name' or col == 'cuisename':
-						cuisine_dict['name'] = result[i] if result[i] else 'N/A'
-						break
-				if 'name' not in cuisine_dict:
-					# Use first non-ID column as name, or second column
-					if len(result) > 1:
-						cuisine_dict['name'] = result[1] if result[1] else 'N/A'
-					else:
-						cuisine_dict['name'] = 'N/A'
-			
-			cuisines_list.append(cuisine_dict)
+			cuisines_list.append({
+				'id': result[0],
+				'name': result[1]
+			})
 		cursor.close()
 		print(f"Found {len(cuisines_list)} cuisines")
 		if len(cuisines_list) > 0:
@@ -919,12 +589,360 @@ def cuisines():
 	return render_template("cuisines.html", **context)
 
 
-@app.route('/login')
+# Helper function to check user role
+def check_user_role(user_id, required_roles):
+	"""Check if user_id has one of the required roles. Returns (has_access, role)"""
+	if not user_id:
+		return False, None
+	g.conn.execute(text("SET search_path TO jcw2239, public;"))
+	try:
+		query = "SELECT role FROM users WHERE userid = :user_id;"
+		cursor = g.conn.execute(text(query), {'user_id': user_id})
+		result = cursor.fetchone()
+		cursor.close()
+		if result:
+			user_role = result[0]
+			return user_role in required_roles, user_role
+		return False, None
+	except Exception as e:
+		print(f"Error checking user role: {e}")
+		return False, None
+
+# Helper function to verify logged-in user can perform action
+def verify_user_access(required_roles):
+	"""Check if currently logged-in user (from session) has required role. Returns (has_access, user_id, role)"""
+	user_id = session.get('user_id')
+	if not user_id:
+		return False, None, None
+	has_access, role = check_user_role(user_id, required_roles)
+	return has_access, user_id, role
+
+
+# Add Restaurant (Admin only)
+@app.route('/restaurants/add', methods=['GET', 'POST'])
+def add_restaurant():
+	# Check login and role
+	check_result = require_login_check(required_roles=['Admin'])
+	if check_result:
+		return check_result
+	
+	g.conn.execute(text("SET search_path TO jcw2239, public;"))
+	
+	if request.method == 'POST':
+		# Use logged-in user from session
+		user_id = session.get('user_id')
+		
+		name = request.form.get('name', '').strip()
+		location = request.form.get('location', '').strip() or None
+		price_range = request.form.get('price_range', '').strip() or None
+		
+		if not name:
+			return "Error: Restaurant name is required", 400
+		
+		try:
+			with g.conn.begin():
+				insert_query = """
+				INSERT INTO restaurant (name, location, pricerange)
+				VALUES (:name, :location, :price_range)
+				RETURNING restaurantid;
+				"""
+				cursor = g.conn.execute(text(insert_query), {
+					'name': name,
+					'location': location,
+					'price_range': price_range
+				})
+				restaurant_id = cursor.fetchone()[0]
+				cursor.close()
+			return redirect(f'/restaurants/{restaurant_id}')
+		except Exception as e:
+			print(f"Error adding restaurant: {e}")
+			import traceback
+			traceback.print_exc()
+			return f"Error: {e}", 500
+	
+	# GET: Show form
+	context = dict(current_user={'id': session.get('user_id'), 'username': session.get('username')})
+	return render_template("add_restaurant.html", **context)
+
+
+# Add Dish (Admin only)
+@app.route('/restaurants/<int:restaurant_id>/add-dish', methods=['GET', 'POST'])
+def add_dish(restaurant_id):
+	# Check login and role
+	check_result = require_login_check(required_roles=['Admin'])
+	if check_result:
+		return check_result
+	
+	g.conn.execute(text("SET search_path TO jcw2239, public;"))
+	
+	if request.method == 'POST':
+		# Use logged-in user from session
+		user_id = session.get('user_id')
+		
+		name = request.form.get('name', '').strip()
+		ingredients = request.form.get('ingredients', '').strip() or None
+		
+		if not name:
+			return "Error: Dish name is required", 400
+		
+		try:
+			with g.conn.begin():
+				insert_query = """
+				INSERT INTO dish (name, ingredients, restaurantid)
+				VALUES (:name, :ingredients, :restaurant_id)
+				RETURNING dishid;
+				"""
+				cursor = g.conn.execute(text(insert_query), {
+					'name': name,
+					'ingredients': ingredients,
+					'restaurant_id': restaurant_id
+				})
+				dish_id = cursor.fetchone()[0]
+				cursor.close()
+			return redirect(f'/restaurants/{restaurant_id}')
+		except Exception as e:
+			print(f"Error adding dish: {e}")
+			import traceback
+			traceback.print_exc()
+			return f"Error: {e}", 500
+	
+	# GET: Show form
+	try:
+		# Get restaurant info
+		rest_query = "SELECT restaurantid, name FROM restaurant WHERE restaurantid = :id;"
+		cursor = g.conn.execute(text(rest_query), {'id': restaurant_id})
+		restaurant = cursor.fetchone()
+		cursor.close()
+		
+		if not restaurant:
+			return "Restaurant not found", 404
+	except Exception as e:
+		return f"Error: {e}", 500
+	
+	context = dict(restaurant={'id': restaurant[0], 'name': restaurant[1]}, 
+	               current_user={'id': session.get('user_id'), 'username': session.get('username')})
+	return render_template("add_dish.html", **context)
+
+
+# Add Review (Admin or Customer)
+@app.route('/restaurants/<int:restaurant_id>/add-review', methods=['GET', 'POST'])
+def add_review(restaurant_id):
+	# Check login and role
+	check_result = require_login_check(required_roles=['Admin', 'Cust'])
+	if check_result:
+		return check_result
+	
+	g.conn.execute(text("SET search_path TO jcw2239, public;"))
+	
+	if request.method == 'POST':
+		# Use logged-in user from session
+		user_id = session.get('user_id')
+		
+		rating = request.form.get('rating', type=int)
+		comment = request.form.get('comment', '').strip() or None
+		
+		if not rating or rating < 1 or rating > 5:
+			return "Error: Rating must be between 1 and 5", 400
+		
+		try:
+			with g.conn.begin():
+				insert_query = """
+				INSERT INTO review (rating, comment, userid, restaurantid)
+				VALUES (:rating, :comment, :user_id, :restaurant_id)
+				RETURNING reviewid;
+				"""
+				cursor = g.conn.execute(text(insert_query), {
+					'rating': rating,
+					'comment': comment,
+					'user_id': user_id,
+					'restaurant_id': restaurant_id
+				})
+				review_id = cursor.fetchone()[0]
+				cursor.close()
+			return redirect(f'/restaurants/{restaurant_id}')
+		except Exception as e:
+			print(f"Error adding review: {e}")
+			import traceback
+			traceback.print_exc()
+			return f"Error: {e}", 500
+	
+	# GET: Show form
+	try:
+		# Get restaurant info
+		rest_query = "SELECT restaurantid, name FROM restaurant WHERE restaurantid = :id;"
+		cursor = g.conn.execute(text(rest_query), {'id': restaurant_id})
+		restaurant = cursor.fetchone()
+		cursor.close()
+		
+		if not restaurant:
+			return "Restaurant not found", 404
+	except Exception as e:
+		return f"Error: {e}", 500
+	
+	context = dict(restaurant={'id': restaurant[0], 'name': restaurant[1]},
+	               current_user={'id': session.get('user_id'), 'username': session.get('username')})
+	return render_template("add_review.html", **context)
+
+
+# Create Order (Admin or Customer)
+@app.route('/restaurants/<int:restaurant_id>/add-order', methods=['GET', 'POST'])
+def create_order(restaurant_id):
+	# Check login and role
+	check_result = require_login_check(required_roles=['Admin', 'Cust'])
+	if check_result:
+		return check_result
+	
+	g.conn.execute(text("SET search_path TO jcw2239, public;"))
+	
+	if request.method == 'POST':
+		# Use logged-in user from session
+		user_id = session.get('user_id')
+		
+		# Get dish IDs and quantities from form
+		dish_ids = request.form.getlist('dish_id[]')
+		quantities = request.form.getlist('quantity[]')
+		
+		if not dish_ids or not all(dish_ids):
+			return "Error: At least one dish is required", 400
+		
+		try:
+			# Calculate total price
+			total_price = 0
+			order_items = []
+			
+			for dish_id_str, quantity_str in zip(dish_ids, quantities):
+				if not dish_id_str or not quantity_str:
+					continue
+				dish_id = int(dish_id_str)
+				quantity = int(quantity_str)
+				
+				if quantity <= 0:
+					continue
+				
+				# Get dish price from orderitem (if exists) or set default
+				# For now, we'll need to get price from form or calculate
+				price_str = request.form.get(f'price_{dish_id}', '0')
+				price = float(price_str) if price_str else 0.0
+				
+				order_items.append({
+					'dish_id': dish_id,
+					'quantity': quantity,
+					'price': price
+				})
+				total_price += price * quantity
+			
+			if not order_items:
+				return "Error: At least one valid dish with quantity > 0 is required", 400
+			
+			# Create order and items in a transaction
+			with g.conn.begin():
+				# Create order
+				order_query = """
+				INSERT INTO orders (userid, restaurantid, totalprice)
+				VALUES (:user_id, :restaurant_id, :total_price)
+				RETURNING orderid;
+				"""
+				cursor = g.conn.execute(text(order_query), {
+					'user_id': user_id,
+					'restaurant_id': restaurant_id,
+					'total_price': total_price
+				})
+				order_id = cursor.fetchone()[0]
+				cursor.close()
+				
+				# Add order items
+				for item in order_items:
+					item_query = """
+					INSERT INTO orderitem (orderid, dishid, quantity, price)
+					VALUES (:order_id, :dish_id, :quantity, :price);
+					"""
+					g.conn.execute(text(item_query), {
+						'order_id': order_id,
+						'dish_id': item['dish_id'],
+						'quantity': item['quantity'],
+						'price': item['price']
+					})
+			
+			return redirect(f'/orders/{order_id}')
+		except Exception as e:
+			print(f"Error creating order: {e}")
+			import traceback
+			traceback.print_exc()
+			return f"Error: {e}", 500
+	
+	# GET: Show form
+	try:
+		# Get restaurant info
+		rest_query = "SELECT restaurantid, name FROM restaurant WHERE restaurantid = :id;"
+		cursor = g.conn.execute(text(rest_query), {'id': restaurant_id})
+		restaurant = cursor.fetchone()
+		cursor.close()
+		
+		if not restaurant:
+			return "Restaurant not found", 404
+		
+		# Get dishes for this restaurant
+		dishes_query = "SELECT dishid, name FROM dish WHERE restaurantid = :id ORDER BY name;"
+		cursor = g.conn.execute(text(dishes_query), {'id': restaurant_id})
+		dishes = [{'id': row[0], 'name': row[1]} for row in cursor]
+		cursor.close()
+	except Exception as e:
+		return f"Error: {e}", 500
+	
+	context = dict(restaurant={'id': restaurant[0], 'name': restaurant[1]}, dishes=dishes,
+	               current_user={'id': session.get('user_id'), 'username': session.get('username')})
+	return render_template("create_order.html", **context)
+
+
+# Login page
+@app.route('/login', methods=['GET', 'POST'])
 def login():
-	abort(401)
-	# Your IDE may highlight this as a problem - because no such function exists (intentionally).
-	# This code is never executed because of abort().
-	this_is_never_executed()
+	g.conn.execute(text("SET search_path TO jcw2239, public;"))
+	
+	if request.method == 'POST':
+		username = request.form.get('username', '').strip()
+		password = request.form.get('password', '').strip()
+		
+		if not username or not password:
+			return render_template("login.html", error="Username and password are required")
+		
+		try:
+			# Check credentials
+			query = "SELECT userid, username, role FROM users WHERE username = :username AND password = :password;"
+			cursor = g.conn.execute(text(query), {'username': username, 'password': password})
+			user = cursor.fetchone()
+			cursor.close()
+			
+			if user:
+				session['user_id'] = user[0]
+				session['username'] = user[1]
+				session['role'] = user[2]
+				return redirect(request.args.get('next', '/'))
+			else:
+				return render_template("login.html", error="Invalid username or password")
+		except Exception as e:
+			print(f"Error during login: {e}")
+			return render_template("login.html", error="Login error occurred")
+	
+	# GET: Show login form
+	return render_template("login.html")
+
+# Logout
+@app.route('/logout')
+def logout():
+	session.clear()
+	return redirect('/')
+
+# Require login wrapper function
+def require_login_check(required_roles=None):
+	"""Check if user is logged in and has required role"""
+	if 'user_id' not in session:
+		return redirect(f'/login?next={request.url}')
+	if required_roles:
+		has_access, user_id, role = verify_user_access(required_roles)
+		if not has_access:
+			return f"Access denied: This action requires {', '.join(required_roles)} role", 403
+	return None  # Access granted
 
 
 if __name__ == "__main__":

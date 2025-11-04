@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+
+{% block content %}
+  <h1>Add Dish to {{ restaurant.name }}</h1>
+  <p><a href="/restaurants/{{ restaurant.id }}">← Back to Restaurant</a></p>
+  
+  <p><strong>Logged in as:</strong> {{ current_user.username }} ({{ session.role }})</p>
+  
+  <form method="POST">
+    <div>
+      <label for="name">Dish Name:</label>
+      <input type="text" name="name" id="name" required>
+    </div>
+    
+    <div>
+      <label for="ingredients">Ingredients:</label>
+      <textarea name="ingredients" id="ingredients" rows="4"></textarea>
+    </div>
+    
+    <div>
+      <button type="submit">Add Dish</button>
+    </div>
+  </form>
+{% endblock %}
+

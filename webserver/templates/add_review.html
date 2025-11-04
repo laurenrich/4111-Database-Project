@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+
+{% block content %}
+  <h1>Add Review for {{ restaurant.name }}</h1>
+  <p><a href="/restaurants/{{ restaurant.id }}">← Back to Restaurant</a></p>
+  
+  <p><strong>Logged in as:</strong> {{ current_user.username }} ({{ session.role }})</p>
+  
+  <form method="POST">
+    <div>
+      <label for="rating">Rating (1-5):</label>
+      <select name="rating" id="rating" required>
+        <option value="">-- Select Rating --</option>
+        <option value="1">1 - Poor</option>
+        <option value="2">2 - Fair</option>
+        <option value="3">3 - Good</option>
+        <option value="4">4 - Very Good</option>
+        <option value="5">5 - Excellent</option>
+      </select>
+    </div>
+    
+    <div>
+      <label for="comment">Comment:</label>
+      <textarea name="comment" id="comment" rows="4"></textarea>
+    </div>
+    
+    <div>
+      <button type="submit">Submit Review</button>
+    </div>
+  </form>
+{% endblock %}
+

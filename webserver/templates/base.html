@@ -72,6 +72,11 @@
       <a href="/users">Users</a> |
       <a href="/orders">Orders</a> |
       <a href="/reviews">Reviews</a>
+      {% if session.user_id %}
+        | <a href="/logout">Logout ({{ session.username }})</a>
+      {% else %}
+        | <a href="/login">Login</a>
+      {% endif %}
     </div>
     
     {% block content %}{% endblock %}

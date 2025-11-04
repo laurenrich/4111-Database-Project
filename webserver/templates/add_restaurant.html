@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+
+{% block content %}
+  <h1>Add New Restaurant</h1>
+  <p><a href="/restaurants">← Back to Restaurants</a></p>
+  
+  <p><strong>Logged in as:</strong> {{ current_user.username }} ({{ session.role }})</p>
+  
+  <form method="POST">
+    <div>
+      <label for="name">Restaurant Name:</label>
+      <input type="text" name="name" id="name" required>
+    </div>
+    
+    <div>
+      <label for="location">Location:</label>
+      <input type="text" name="location" id="location">
+    </div>
+    
+    <div>
+      <label for="price_range">Price Range:</label>
+      <select name="price_range" id="price_range">
+        <option value="">-- Select Price Range --</option>
+        <option value="$">$</option>
+        <option value="$$">$$</option>
+        <option value="$$$">$$$</option>
+        <option value="$$$$">$$$$</option>
+      </select>
+    </div>
+    
+    <div>
+      <button type="submit">Add Restaurant</button>
+    </div>
+  </form>
+{% endblock %}
+

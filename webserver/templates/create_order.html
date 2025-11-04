@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+
+{% block content %}
+  <h1>Create Order for {{ restaurant.name }}</h1>
+  <p><a href="/restaurants/{{ restaurant.id }}">← Back to Restaurant</a></p>
+  
+  <p><strong>Logged in as:</strong> {{ current_user.username }} ({{ session.role }})</p>
+  
+  <form method="POST" id="orderForm">
+    <h2>Select Dishes</h2>
+    {% if dishes|length == 0 %}
+      <p>No dishes available for this restaurant.</p>
+    {% else %}
+      <table>
+        <tr>
+          <th>Dish</th>
+          <th>Quantity</th>
+          <th>Price (per item)</th>
+        </tr>
+        {% for dish in dishes %}
+        <tr>
+          <td>{{ dish.name }}</td>
+          <td>
+            <input type="number" name="quantity[]" min="0" value="0" 
+                   onchange="updateQuantity({{ dish.id }}, this.value)">
+            <input type="hidden" name="dish_id[]" value="{{ dish.id }}">
+          </td>
+          <td>
+            <input type="number" name="price_{{ dish.id }}" step="0.01" min="0" 
+                   value="0.00" required>
+          </td>
+        </tr>
+        {% endfor %}
+      </table>
+    {% endif %}
+    
+    <div>
+      <button type="submit">Create Order</button>
+    </div>
+  </form>
+  
+  <script>
+    function updateQuantity(dishId, quantity) {
+      // If quantity is set, make price field visible/required
+      var priceInput = document.querySelector('input[name="price_' + dishId + '"]');
+      if (quantity > 0) {
+        priceInput.required = true;
+      } else {
+        priceInput.required = false;
+        priceInput.value = "0.00";
+      }
+    }
+  </script>
+{% endblock %}
+
