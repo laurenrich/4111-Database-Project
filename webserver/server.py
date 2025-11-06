@@ -103,114 +103,8 @@ def teardown_request(exception):
 #
 @app.route('/')
 def index():
-	"""
-	request is a special object that Flask provides to access web request information:
-
-	request.method:   "GET" or "POST"
-	request.form:     if the browser submitted a form, this contains the data in the form
-	request.args:     dictionary of URL arguments, e.g., {a:1, b:2} for http://localhost?a=1&b=2
-
-	See its API: https://flask.palletsprojects.com/en/1.1.x/api/#incoming-request-data
-	"""
-
-	# DEBUG: this is debugging code to see what request looks like
-	print(request.args)
-
-	#
-	# Find all your tables in the database - check all schemas
-	#
-	# Get database name
-	db_query = "SELECT current_database();"
-	cursor = g.conn.execute(text(db_query))
-	db_name = cursor.fetchone()[0]
-	cursor.close()
-	
-	# Get all tables from all schemas
-	tables_query = """
-	SELECT table_schema, table_name 
-	FROM information_schema.tables 
-	WHERE table_type = 'BASE TABLE'
-	AND table_schema NOT IN ('information_schema', 'pg_catalog')
-	ORDER BY table_schema, table_name;
-	"""
-	cursor = g.conn.execute(text(tables_query))
-	all_tables = []
-	public_tables = []
-	for result in cursor:
-		schema, table = result[0], result[1]
-		all_tables.append(f"{schema}.{table}")
-		if schema == 'public':
-			public_tables.append(table)
-	cursor.close()
-	
-	print(f"Connected to database: {db_name}")
-	print(f"Tables in 'public' schema: {public_tables}")
-	if len(all_tables) > len(public_tables):
-		print(f"Tables in other schemas: {[t for t in all_tables if not t.startswith('public.')]}")
-	
-	#
-	# Query your actual data - using your restaurant tables
-	#
-	# Set the search path to your schema so we can use table names directly
-	g.conn.execute(text(f"SET search_path TO jcw2239, public;"))
-	
-	# Query one of your actual tables - let's start with restaurant
-	# Change this to query different tables: cuisine, dish, users, orders, etc.
-	try:
-		select_query = "SELECT name FROM restaurant LIMIT 10;"
-		cursor = g.conn.execute(text(select_query))
-		names = []
-		for result in cursor:
-			names.append(result[0])
-		cursor.close()
-			
-		if len(names) == 0:
-			names = ["No restaurants found in the database."]
-		else:
-			names.insert(0, f"Restaurants ({len(names)} shown):")
-	except Exception as e:
-		print(f"Error querying restaurant table: {e}")
-		# Fallback: show table list
-		names = [f"📊 Found {len(all_tables)} table(s) in database '{db_name}':"]
-		for table in all_tables:
-			names.append(f"  - {table}")
-		names.append("")
-		names.append(f"Error querying restaurant table: {e}")
-
-	#
-	# Flask uses Jinja templates, which is an extension to HTML where you can
-	# pass data to a template and dynamically generate HTML based on the data
-	# (you can think of it as simple PHP)
-	# documentation: https://realpython.com/primer-on-jinja-templating/
-	#
-	# You can see an example template in templates/index.html
-	#
-	# context are the variables that are passed to the template.
-	# for example, "data" key in the context variable defined below will be 
-	# accessible as a variable in index.html:
-	#
-	#     # will print: [u'grace hopper', u'alan turing', u'ada lovelace']
-	#     <div>{{data}}</div>
-	#     
-	#     # creates a <div> tag for each element in data
-	#     # will print: 
-	#     #
-	#     #   <div>grace hopper</div>
-	#     #   <div>alan turing</div>
-	#     #   <div>ada lovelace</div>
-	#     #
-	#     {% for n in data %}
-	#     <div>{{n}}</div>
-	#     {% endfor %}
-	#
-	context = dict(data = names)
-
-
-	#
-	# render_template looks in the templates/ folder for files.
-	# for example, the below file reads template/index.html
-	#
-	return render_template("index.html", **context)
+	# Redirect to restaurant directory as the main landing page
+	return redirect('/restaurants')
 
 #
 # This is an example of a different path.  You can see it at:
@@ -220,24 +114,71 @@ def index():
 # Notice that the function name is another() rather than index()
 # The functions for each app.route need to have different names
 #
-# View all restaurants
+# View all restaurants with search/filter functionality
 @app.route('/restaurants')
 def restaurants():
-	# Set search path to your schema
 	g.conn.execute(text("SET search_path TO jcw2239, public;"))
 	
+	# Get filter parameters
+	search = request.args.get('search', '').strip()
+	cuisine_filter = request.args.get('cuisine', '')
+	price_filter = request.args.get('price_range', '')
+	location_filter = request.args.get('location', '').strip()
+	
 	try:
-		# Schema has: RestaurantID, Name, Location, PriceRange
-		# PostgreSQL converts to lowercase: restaurantid, name, location, pricerange
-		select_query = "SELECT restaurantid, name, location FROM restaurant ORDER BY name;"
-		cursor = g.conn.execute(text(select_query))
+		# Build dynamic query with filters
+		base_query = """
+		SELECT DISTINCT r.restaurantid, r.name, r.location, r.pricerange
+		FROM restaurant r
+		LEFT JOIN restaurantcuisine rc ON r.restaurantid = rc.restaurantid
+		LEFT JOIN cuisine c ON rc.cuisineid = c.cuisineid
+		WHERE 1=1
+		"""
+		params = {}
+		
+		if search:
+			base_query += " AND r.name ILIKE :search"
+			params['search'] = f"%{search}%"
+		
+		if cuisine_filter:
+			base_query += " AND c.cuisinename = :cuisine"
+			params['cuisine'] = cuisine_filter
+		
+		if price_filter:
+			base_query += " AND r.pricerange = :price_range"
+			params['price_range'] = price_filter
+		
+		if location_filter:
+			base_query += " AND r.location = :location"
+			params['location'] = location_filter
+		
+		base_query += " ORDER BY r.name;"
+		
+		cursor = g.conn.execute(text(base_query), params)
 		restaurants = []
 		for result in cursor:
 			restaurants.append({
 				'id': result[0],
 				'name': result[1],
-				'address': result[2] if result[2] else 'N/A'
+				'address': result[2] if result[2] else 'N/A',
+				'price_range': result[3] if result[3] else 'N/A'
 			})
+		cursor.close()
+		
+		# Get filter options
+		cuisines_query = "SELECT DISTINCT cuisinename FROM cuisine ORDER BY cuisinename;"
+		cursor = g.conn.execute(text(cuisines_query))
+		cuisines = [row[0] for row in cursor]
+		cursor.close()
+		
+		price_ranges_query = "SELECT DISTINCT pricerange FROM restaurant WHERE pricerange IS NOT NULL ORDER BY pricerange;"
+		cursor = g.conn.execute(text(price_ranges_query))
+		price_ranges = [row[0] for row in cursor]
+		cursor.close()
+		
+		locations_query = "SELECT DISTINCT location FROM restaurant WHERE location IS NOT NULL ORDER BY location;"
+		cursor = g.conn.execute(text(locations_query))
+		locations = [row[0] for row in cursor]
 		cursor.close()
 		
 		print(f"Found {len(restaurants)} restaurants")
@@ -246,8 +187,22 @@ def restaurants():
 		import traceback
 		traceback.print_exc()
 		restaurants = []
+		cuisines = []
+		price_ranges = []
+		locations = []
 	
-	context = dict(restaurants=restaurants)
+	context = dict(
+		restaurants=restaurants,
+		cuisines=cuisines,
+		price_ranges=price_ranges,
+		locations=locations,
+		filters={
+			'search': search,
+			'cuisine': cuisine_filter,
+			'price_range': price_filter,
+			'location': location_filter
+		}
+	)
 	return render_template("restaurants.html", **context)
 
 # View restaurant details - shows all relationships

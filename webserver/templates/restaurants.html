@@ -1,24 +1,72 @@
 {% extends "base.html" %}
 
 {% block content %}
-  <h1>Restaurants</h1>
+  <h1>Restaurant Directory</h1>
+  
+  <!-- Search and Filter Form -->
+  <form method="GET" style="margin-bottom: 20px; padding: 15px; border: 1px solid #ddd; background-color: #f9f9f9;">
+    <div style="display: flex; gap: 15px; flex-wrap: wrap; align-items: end;">
+      <div>
+        <label for="search">Search:</label><br>
+        <input type="text" name="search" id="search" value="{{ filters.search }}" placeholder="Restaurant name...">
+      </div>
+      
+      <div>
+        <label for="cuisine">Cuisine:</label><br>
+        <select name="cuisine" id="cuisine">
+          <option value="">All Cuisines</option>
+          {% for cuisine in cuisines %}
+            <option value="{{ cuisine }}" {% if filters.cuisine == cuisine %}selected{% endif %}>{{ cuisine }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      
+      <div>
+        <label for="price_range">Price Range:</label><br>
+        <select name="price_range" id="price_range">
+          <option value="">All Prices</option>
+          {% for price in price_ranges %}
+            <option value="{{ price }}" {% if filters.price_range == price %}selected{% endif %}>{{ price }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      
+      <div>
+        <label for="location">Location:</label><br>
+        <select name="location" id="location">
+          <option value="">All Locations</option>
+          {% for location in locations %}
+            <option value="{{ location }}" {% if filters.location == location %}selected{% endif %}>{{ location }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      
+      <div>
+        <button type="submit">Search</button>
+        <a href="/restaurants" style="margin-left: 10px;">Clear</a>
+      </div>
+    </div>
+  </form>
   
   <p><a href="/restaurants/add">Add New Restaurant</a></p>
   
+  <!-- Results -->
   {% if restaurants|length == 0 %}
-    <p>No restaurants found.</p>
+    <p>No restaurants found matching your criteria.</p>
   {% else %}
     <p>Found {{ restaurants|length }} restaurant(s):</p>
     <table>
       <tr>
         <th>Name</th>
         <th>Address</th>
+        <th>Price Range</th>
         <th>Actions</th>
       </tr>
       {% for r in restaurants %}
       <tr>
         <td>{{ r.name }}</td>
         <td>{{ r.address }}</td>
+        <td>{{ r.price_range }}</td>
         <td>
           <a href="/restaurants/{{ r.id }}">View Details</a>
         </td>

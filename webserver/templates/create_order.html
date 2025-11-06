@@ -21,6 +21,7 @@
         <tr>
           <td>{{ dish.name }}</td>
           <td>
+<<<<<<< Updated upstream
             {% if dish.price %}
               ${{ "%.2f"|format(dish.price) }}
             {% else %}
@@ -32,6 +33,19 @@
             <input type="number" name="quantity[]" min="0" value="0" 
                    onchange="updateTotal()">
             <input type="hidden" name="dish_id[]" value="{{ dish.id }}">
+=======
+            <input type="number" name="quantity[]" min="0" value="0">
+            <input type="hidden" name="dish_id[]" value="{{ dish.id }}">
+          </td>
+          <td>
+            {% if session.role == 'Admin' %}
+              <input type="number" name="price_{{ dish.id }}" step="0.01" min="0" 
+                     value="{{ dish.price if dish.price else '0.00' }}" required>
+            {% else %}
+              ${{ "%.2f"|format(dish.price if dish.price else 0.00) }}
+              <input type="hidden" name="price_{{ dish.id }}" value="{{ dish.price if dish.price else '0.00' }}">
+            {% endif %}
+>>>>>>> Stashed changes
           </td>
         </tr>
         {% endfor %}
@@ -47,6 +61,7 @@
     </div>
   </form>
   
+<<<<<<< Updated upstream
   <script>
     function updateTotal() {
       var total = 0;
@@ -76,5 +91,8 @@
       });
     });
   </script>
+=======
+
+>>>>>>> Stashed changes
 {% endblock %}
 
