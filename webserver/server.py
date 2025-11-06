@@ -761,6 +761,29 @@ def create_order(restaurant_id):
 		# Use logged-in user from session
 		user_id = session.get('user_id')
 		
+		if not user_id:
+			return "Error: You must be logged in to create an order", 400
+		
+		# Verify user exists in database (commit any pending transaction first)
+		try:
+			g.conn.commit()
+		except:
+			pass  # If no transaction, that's fine
+		
+		user_check = "SELECT userid FROM users WHERE userid = :user_id;"
+		cursor = g.conn.execute(text(user_check), {'user_id': user_id})
+		user_exists = cursor.fetchone()
+		cursor.close()
+		
+		# Commit the user check query
+		try:
+			g.conn.commit()
+		except:
+			pass
+		
+		if not user_exists:
+			return f"Error: User ID {user_id} not found in database. Please log out and log back in.", 400
+		
 		# Get dish IDs and quantities from form
 		dish_ids = request.form.getlist('dish_id[]')
 		quantities = request.form.getlist('quantity[]')
@@ -800,8 +823,15 @@ def create_order(restaurant_id):
 			if not order_items:
 				return "Error: At least one valid dish with quantity > 0 is required", 400
 			
+			# Commit any pending queries before starting transaction
+			try:
+				g.conn.commit()
+			except:
+				pass
+			
 			# Create order and items in a transaction
-			with g.conn.begin():
+			trans = g.conn.begin()
+			try:
 				# Create order
 				order_query = """
 				INSERT INTO orders (userid, restaurantid, totalprice)
@@ -828,13 +858,29 @@ def create_order(restaurant_id):
 						'quantity': item['quantity'],
 						'price': item['price']
 					})
+				
+				# Commit the transaction
+				trans.commit()
+			except Exception as e:
+				# Rollback on error
+				trans.rollback()
+				raise e
 			
 			return redirect(f'/orders/{order_id}')
 		except Exception as e:
 			print(f"Error creating order: {e}")
 			import traceback
 			traceback.print_exc()
-			return f"Error: {e}", 500
+			error_msg = str(e)
+			# Check for common constraint violations
+			if "foreign key" in error_msg.lower() or "violates foreign key constraint" in error_msg.lower():
+				if "userid" in error_msg.lower():
+					return f"Error: Your user account (ID: {user_id}) is not valid. Please log out and log back in. Full error: {error_msg}", 400
+				elif "dishid" in error_msg.lower():
+					return f"Error: One or more dishes are invalid. Please refresh the page and try again. Full error: {error_msg}", 400
+				elif "restaurantid" in error_msg.lower():
+					return f"Error: Restaurant (ID: {restaurant_id}) is not valid. Full error: {error_msg}", 400
+			return f"Error creating order: {error_msg}", 500
 	
 	# GET: Show form
 	try:
