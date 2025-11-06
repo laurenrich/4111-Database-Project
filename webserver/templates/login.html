@@ -7,7 +7,7 @@
     <div class="error">{{ error }}</div>
   {% endif %}
   
-  <form method="POST">
+  <form method="POST" action="/login">
     <div>
       <label for="username">Username:</label>
       <input type="text" name="username" id="username" required>
@@ -23,6 +23,6 @@
     </div>
   </form>
   
+  <p><a href="/register">Don't have an account? Sign up</a></p>
   <p><a href="/">Back to Home</a></p>
 {% endblock %}
-

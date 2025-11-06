@@ -243,10 +243,11 @@ def restaurant_details(restaurant_id):
 		# Get reviews for this restaurant
 		# Schema has: ReviewID, Rating, Comment, UserID, RestaurantID (no date column)
 		reviews_query = """
-		SELECT reviewid, userid, rating, comment 
-		FROM review 
-		WHERE restaurantid = :id 
-		ORDER BY reviewid DESC;
+		SELECT r.reviewid, r.userid, r.rating, r.comment, u.name as user_name
+		FROM review r
+		LEFT JOIN users u ON r.userid = u.userid
+		WHERE r.restaurantid = :id 
+		ORDER BY r.reviewid DESC;
 		"""
 		cursor = g.conn.execute(text(reviews_query), {'id': restaurant_id})
 		reviews = []
@@ -255,7 +256,8 @@ def restaurant_details(restaurant_id):
 				'id': result[0],
 				'user_id': result[1],
 				'rating': result[2] if result[2] else 'N/A',
-				'text': result[3] if result[3] else 'No text'
+				'text': result[3] if result[3] else 'No text',
+				'user_name': result[4] if result[4] else 'Unknown User'
 			})
 		cursor.close()
 		
@@ -374,23 +376,27 @@ def dishes():
 	context = dict(dishes=dishes)
 	return render_template("dishes.html", **context)
 
-# View all orders (across all restaurants)
+# View user's orders
 @app.route('/orders')
 def orders():
+	check_result = require_login_check()
+	if check_result:
+		return check_result
+	
 	g.conn.execute(text("SET search_path TO jcw2239, public;"))
 	
 	try:
-		# Schema has: OrderID, Date, TotalPrice, UserID, RestaurantID
-		# PostgreSQL converts to lowercase: orderid, date, totalprice, userid, restaurantid
+		user_id = session.get('user_id')
 		select_query = """
 		SELECT o.orderid, o.userid, o.restaurantid, o.date, o.totalprice,
 		       r.name as restaurant_name, u.username
 		FROM orders o
 		LEFT JOIN restaurant r ON o.restaurantid = r.restaurantid
 		LEFT JOIN users u ON o.userid = u.userid
+		WHERE o.userid = :user_id
 		ORDER BY o.date DESC;
 		"""
-		cursor = g.conn.execute(text(select_query))
+		cursor = g.conn.execute(text(select_query), {'user_id': user_id})
 		
 		orders_list = []
 		for result in cursor:
@@ -476,23 +482,27 @@ def order_details(order_id):
 	context = dict(order=order_info, items=items)
 	return render_template("order_details.html", **context)
 
-# View all reviews (across all restaurants)
+# View user's reviews
 @app.route('/reviews')
 def reviews():
+	check_result = require_login_check()
+	if check_result:
+		return check_result
+	
 	g.conn.execute(text("SET search_path TO jcw2239, public;"))
 	
 	try:
-		# Schema: ReviewID, Rating, Comment, UserID, RestaurantID (no date)
-		# PostgreSQL converts to lowercase: reviewid, rating, comment, userid, restaurantid
+		user_id = session.get('user_id')
 		select_query = """
 		SELECT r.reviewid, r.userid, r.restaurantid, r.rating, r.comment,
 		       rest.name as restaurant_name, u.username
 		FROM review r
 		LEFT JOIN restaurant rest ON r.restaurantid = rest.restaurantid
 		LEFT JOIN users u ON r.userid = u.userid
+		WHERE r.userid = :user_id
 		ORDER BY r.reviewid DESC;
 		"""
-		cursor = g.conn.execute(text(select_query))
+		cursor = g.conn.execute(text(select_query), {'user_id': user_id})
 		reviews_list = []
 		for result in cursor:
 			review_dict = {
@@ -600,19 +610,19 @@ def add_restaurant():
 			return "Error: Restaurant name is required", 400
 		
 		try:
-			with g.conn.begin():
-				insert_query = """
-				INSERT INTO restaurant (name, location, pricerange)
-				VALUES (:name, :location, :price_range)
-				RETURNING restaurantid;
-				"""
-				cursor = g.conn.execute(text(insert_query), {
-					'name': name,
-					'location': location,
-					'price_range': price_range
-				})
-				restaurant_id = cursor.fetchone()[0]
-				cursor.close()
+			insert_query = """
+			INSERT INTO restaurant (name, location, pricerange)
+			VALUES (:name, :location, :price_range)
+			RETURNING restaurantid;
+			"""
+			cursor = g.conn.execute(text(insert_query), {
+				'name': name,
+				'location': location,
+				'price_range': price_range
+			})
+			restaurant_id = cursor.fetchone()[0]
+			cursor.close()
+			g.conn.commit()
 			return redirect(f'/restaurants/{restaurant_id}')
 		except Exception as e:
 			print(f"Error adding restaurant: {e}")
@@ -648,20 +658,20 @@ def add_dish(restaurant_id):
 			return "Error: Dish name is required", 400
 		
 		try:
-			with g.conn.begin():
-				insert_query = """
-				INSERT INTO dish (name, ingredients, restaurantid, price)
-				VALUES (:name, :ingredients, :restaurant_id, :price)
-				RETURNING dishid;
-				"""
-				cursor = g.conn.execute(text(insert_query), {
-					'name': name,
-					'ingredients': ingredients,
-					'restaurant_id': restaurant_id,
-					'price': price
-				})
-				dish_id = cursor.fetchone()[0]
-				cursor.close()
+			insert_query = """
+			INSERT INTO dish (name, ingredients, restaurantid, price)
+			VALUES (:name, :ingredients, :restaurant_id, :price)
+			RETURNING dishid;
+			"""
+			cursor = g.conn.execute(text(insert_query), {
+				'name': name,
+				'ingredients': ingredients,
+				'restaurant_id': restaurant_id,
+				'price': price
+			})
+			dish_id = cursor.fetchone()[0]
+			cursor.close()
+			g.conn.commit()
 			return redirect(f'/restaurants/{restaurant_id}')
 		except Exception as e:
 			print(f"Error adding dish: {e}")
@@ -708,20 +718,20 @@ def add_review(restaurant_id):
 			return "Error: Rating must be between 1 and 5", 400
 		
 		try:
-			with g.conn.begin():
-				insert_query = """
-				INSERT INTO review (rating, comment, userid, restaurantid)
-				VALUES (:rating, :comment, :user_id, :restaurant_id)
-				RETURNING reviewid;
-				"""
-				cursor = g.conn.execute(text(insert_query), {
-					'rating': rating,
-					'comment': comment,
-					'user_id': user_id,
-					'restaurant_id': restaurant_id
-				})
-				review_id = cursor.fetchone()[0]
-				cursor.close()
+			insert_query = """
+			INSERT INTO review (rating, comment, userid, restaurantid)
+			VALUES (:rating, :comment, :user_id, :restaurant_id)
+			RETURNING reviewid;
+			"""
+			cursor = g.conn.execute(text(insert_query), {
+				'rating': rating,
+				'comment': comment,
+				'user_id': user_id,
+				'restaurant_id': restaurant_id
+			})
+			review_id = cursor.fetchone()[0]
+			cursor.close()
+			g.conn.commit()
 			return redirect(f'/restaurants/{restaurant_id}')
 		except Exception as e:
 			print(f"Error adding review: {e}")
@@ -950,11 +960,110 @@ def login():
 	# GET: Show login form
 	return render_template("login.html")
 
+# Register route
+@app.route('/register', methods=['GET', 'POST'])
+def register():
+	if g.conn is None:
+		return "Database unavailable. Please try again later.", 503
+	
+	g.conn.execute(text("SET search_path TO jcw2239, public;"))
+	
+	if request.method == 'POST':
+		name = request.form.get('name', '').strip()
+		username = request.form.get('username', '').strip()
+		password = request.form.get('password', '').strip()
+		
+		if not name or not username or not password:
+			return render_template("register.html", error="All fields are required")
+		
+		if len(password) < 8:
+			return render_template("register.html", error="Password must be at least 8 characters")
+		
+		try:
+			insert_query = """
+			INSERT INTO users (name, username, password, role)
+			VALUES (:name, :username, :password, 'Cust')
+			"""
+			g.conn.execute(text(insert_query), {
+				'name': name,
+				'username': username,
+				'password': password
+			})
+			g.conn.commit()
+			return redirect('/login')
+		except Exception as e:
+			if "unique" in str(e).lower():
+				return render_template("register.html", error="Username already exists")
+			return render_template("register.html", error="Registration failed")
+	
+	return render_template("register.html")
+
 # Logout
 @app.route('/logout')
 def logout():
 	session.clear()
 	return redirect('/')
+
+# Delete Restaurant (Admin only)
+@app.route('/restaurants/<int:restaurant_id>/delete', methods=['POST'])
+def delete_restaurant(restaurant_id):
+	check_result = require_login_check(required_roles=['Admin'])
+	if check_result:
+		return check_result
+	
+	g.conn.execute(text("SET search_path TO jcw2239, public;"))
+	
+	try:
+		delete_query = "DELETE FROM restaurant WHERE restaurantid = :id;"
+		g.conn.execute(text(delete_query), {'id': restaurant_id})
+		g.conn.commit()
+		return redirect('/')
+	except Exception as e:
+		return f"Error deleting restaurant: {e}", 500
+
+# Delete Dish (Admin only)
+@app.route('/dishes/<int:dish_id>/delete', methods=['POST'])
+def delete_dish(dish_id):
+	check_result = require_login_check(required_roles=['Admin'])
+	if check_result:
+		return check_result
+	
+	g.conn.execute(text("SET search_path TO jcw2239, public;"))
+	
+	try:
+		# Get restaurant ID before deleting
+		rest_query = "SELECT restaurantid FROM dish WHERE dishid = :id;"
+		cursor = g.conn.execute(text(rest_query), {'id': dish_id})
+		result = cursor.fetchone()
+		restaurant_id = result[0] if result else None
+		cursor.close()
+		
+		delete_query = "DELETE FROM dish WHERE dishid = :id;"
+		g.conn.execute(text(delete_query), {'id': dish_id})
+		g.conn.commit()
+		
+		if restaurant_id:
+			return redirect(f'/restaurants/{restaurant_id}')
+		return redirect('/')
+	except Exception as e:
+		return f"Error deleting dish: {e}", 500
+
+# Delete Review (Admin only)
+@app.route('/reviews/<int:review_id>/delete', methods=['POST'])
+def delete_review(review_id):
+	check_result = require_login_check(required_roles=['Admin'])
+	if check_result:
+		return check_result
+	
+	g.conn.execute(text("SET search_path TO jcw2239, public;"))
+	
+	try:
+		delete_query = "DELETE FROM review WHERE reviewid = :id;"
+		g.conn.execute(text(delete_query), {'id': review_id})
+		g.conn.commit()
+		return redirect('/')
+	except Exception as e:
+		return f"Error deleting review: {e}", 500
 
 # Require login wrapper function
 def require_login_check(required_roles=None):

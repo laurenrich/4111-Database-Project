@@ -12,7 +12,6 @@
         <th>Order ID</th>
         <th>User</th>
         <th>Restaurant</th>
-        <th>Date</th>
         <th>Total</th>
         <th>Actions</th>
       </tr>
@@ -21,7 +20,6 @@
         <td>{{ o.id }}</td>
         <td>{{ o.username }}</td>
         <td><a href="/restaurants/{{ o.restaurant_id }}">{{ o.restaurant_name }}</a></td>
-        <td>{{ o.date }}</td>
         <td>{{ o.total }}</td>
         <td><a href="/orders/{{ o.id }}">View Details</a></td>
       </tr>
@@ -29,4 +27,3 @@
     </table>
   {% endif %}
 {% endblock %}
-

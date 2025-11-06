@@ -4,7 +4,6 @@
   <h1>Order #{{ order.id }}</h1>
   <p><strong>User:</strong> {{ order.username }} (ID: {{ order.user_id }})</p>
   <p><strong>Restaurant:</strong> <a href="/restaurants/{{ order.restaurant_id }}">{{ order.restaurant_name }}</a></p>
-  <p><strong>Date:</strong> {{ order.date }}</p>
   <p><strong>Total Amount:</strong> {{ order.total }}</p>
   
   <p><a href="/orders">← Back to Orders</a></p>
@@ -27,4 +26,3 @@
     </table>
   {% endif %}
 {% endblock %}
-
