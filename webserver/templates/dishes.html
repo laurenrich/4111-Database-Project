@@ -10,11 +10,19 @@
     <table>
       <tr>
         <th>Name</th>
+        <th>Price</th>
         <th>Restaurant</th>
       </tr>
       {% for d in dishes %}
       <tr>
         <td>{{ d.name }}</td>
+        <td>
+          {% if d.price %}
+            ${{ "%.2f"|format(d.price) }}
+          {% else %}
+            <span style="color: #999;">Not set</span>
+          {% endif %}
+        </td>
         <td>
           {% if d.restaurant_id %}
             <a href="/restaurants/{{ d.restaurant_id }}">{{ d.restaurant_name }}</a>

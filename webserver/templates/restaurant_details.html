@@ -31,11 +31,19 @@
     <table>
       <tr>
         <th>Name</th>
+        <th>Price</th>
         <th>Actions</th>
       </tr>
       {% for d in dishes %}
       <tr>
         <td>{{ d.name }}</td>
+        <td>
+          {% if d.price %}
+            ${{ "%.2f"|format(d.price) }}
+          {% else %}
+            <span style="color: #999;">Not set</span>
+          {% endif %}
+        </td>
         <td><a href="/dishes">View Details</a></td>
       </tr>
       {% endfor %}

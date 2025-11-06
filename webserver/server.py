@@ -273,12 +273,16 @@ def restaurant_details(restaurant_id):
 			'address': restaurant[2] if restaurant[2] else 'N/A'
 		}
 		
-		# Get dishes for this restaurant
-		dishes_query = "SELECT dishid, name FROM dish WHERE restaurantid = :id ORDER BY name;"
+		# Get dishes for this restaurant (including price)
+		dishes_query = "SELECT dishid, name, COALESCE(price, 0.0) as price FROM dish WHERE restaurantid = :id ORDER BY name;"
 		cursor = g.conn.execute(text(dishes_query), {'id': restaurant_id})
 		dishes = []
 		for result in cursor:
-			dishes.append({'id': result[0], 'name': result[1]})
+			dishes.append({
+				'id': result[0], 
+				'name': result[1],
+				'price': float(result[2]) if result[2] else None
+			})
 		cursor.close()
 		
 		# Get reviews for this restaurant
@@ -384,10 +388,10 @@ def dishes():
 	g.conn.execute(text("SET search_path TO jcw2239, public;"))
 	
 	try:
-		# Schema has: DishID, Name, Ingredients, RestaurantID
-		# PostgreSQL converts to lowercase: dishid, name, ingredients, restaurantid
+		# Schema has: DishID, Name, Ingredients, RestaurantID, Price
+		# PostgreSQL converts to lowercase: dishid, name, ingredients, restaurantid, price
 		select_query = """
-		SELECT d.dishid, d.name, d.restaurantid, r.name as restaurant_name
+		SELECT d.dishid, d.name, d.restaurantid, d.price, r.name as restaurant_name
 		FROM dish d
 		LEFT JOIN restaurant r ON d.restaurantid = r.restaurantid
 		ORDER BY d.name;
@@ -400,7 +404,8 @@ def dishes():
 				'id': result[0],
 				'name': result[1],
 				'restaurant_id': result[2],
-				'restaurant_name': result[3] if result[3] else 'N/A'
+				'price': float(result[3]) if result[3] else None,
+				'restaurant_name': result[4] if result[4] else 'N/A'
 			})
 		
 		cursor.close()
@@ -681,6 +686,8 @@ def add_dish(restaurant_id):
 		
 		name = request.form.get('name', '').strip()
 		ingredients = request.form.get('ingredients', '').strip() or None
+		price_str = request.form.get('price', '').strip()
+		price = float(price_str) if price_str else None
 		
 		if not name:
 			return "Error: Dish name is required", 400
@@ -688,14 +695,15 @@ def add_dish(restaurant_id):
 		try:
 			with g.conn.begin():
 				insert_query = """
-				INSERT INTO dish (name, ingredients, restaurantid)
-				VALUES (:name, :ingredients, :restaurant_id)
+				INSERT INTO dish (name, ingredients, restaurantid, price)
+				VALUES (:name, :ingredients, :restaurant_id, :price)
 				RETURNING dishid;
 				"""
 				cursor = g.conn.execute(text(insert_query), {
 					'name': name,
 					'ingredients': ingredients,
-					'restaurant_id': restaurant_id
+					'restaurant_id': restaurant_id,
+					'price': price
 				})
 				dish_id = cursor.fetchone()[0]
 				cursor.close()
@@ -881,10 +889,21 @@ def create_order(restaurant_id):
 		if not restaurant:
 			return "Restaurant not found", 404
 		
-		# Get dishes for this restaurant
-		dishes_query = "SELECT dishid, name FROM dish WHERE restaurantid = :id ORDER BY name;"
+		# Get dishes for this restaurant (including price)
+		dishes_query = """
+		SELECT dishid, name, COALESCE(price, 0.0) as price
+		FROM dish 
+		WHERE restaurantid = :id 
+		ORDER BY name;
+		"""
 		cursor = g.conn.execute(text(dishes_query), {'id': restaurant_id})
-		dishes = [{'id': row[0], 'name': row[1]} for row in cursor]
+		dishes = []
+		for row in cursor:
+			dishes.append({
+				'id': row[0], 
+				'name': row[1],
+				'price': float(row[2]) if row[2] else 0.0
+			})
 		cursor.close()
 	except Exception as e:
 		return f"Error: {e}", 500

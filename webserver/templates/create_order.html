@@ -14,24 +14,32 @@
       <table>
         <tr>
           <th>Dish</th>
-          <th>Quantity</th>
           <th>Price (per item)</th>
+          <th>Quantity</th>
         </tr>
         {% for dish in dishes %}
         <tr>
           <td>{{ dish.name }}</td>
           <td>
-            <input type="number" name="quantity[]" min="0" value="0" 
-                   onchange="updateQuantity({{ dish.id }}, this.value)">
-            <input type="hidden" name="dish_id[]" value="{{ dish.id }}">
+            {% if dish.price %}
+              ${{ "%.2f"|format(dish.price) }}
+            {% else %}
+              <span style="color: #999;">Price not set</span>
+            {% endif %}
+            <input type="hidden" name="price_{{ dish.id }}" value="{{ dish.price }}">
           </td>
           <td>
-            <input type="number" name="price_{{ dish.id }}" step="0.01" min="0" 
-                   value="0.00" required>
+            <input type="number" name="quantity[]" min="0" value="0" 
+                   onchange="updateTotal()">
+            <input type="hidden" name="dish_id[]" value="{{ dish.id }}">
           </td>
         </tr>
         {% endfor %}
       </table>
+      
+      <div style="margin-top: 20px; font-size: 18px; font-weight: bold;">
+        <span>Estimated Total: $<span id="totalPrice">0.00</span></span>
+      </div>
     {% endif %}
     
     <div>
@@ -40,16 +48,33 @@
   </form>
   
   <script>
-    function updateQuantity(dishId, quantity) {
-      // If quantity is set, make price field visible/required
-      var priceInput = document.querySelector('input[name="price_' + dishId + '"]');
-      if (quantity > 0) {
-        priceInput.required = true;
-      } else {
-        priceInput.required = false;
-        priceInput.value = "0.00";
+    function updateTotal() {
+      var total = 0;
+      var rows = document.querySelectorAll('table tr');
+      
+      for (var i = 1; i < rows.length; i++) {
+        var row = rows[i];
+        var quantityInput = row.querySelector('input[name="quantity[]"]');
+        var priceInput = row.querySelector('input[name^="price_"]');
+        
+        if (quantityInput && priceInput) {
+          var quantity = parseInt(quantityInput.value) || 0;
+          var price = parseFloat(priceInput.value) || 0;
+          total += quantity * price;
+        }
       }
+      
+      document.getElementById('totalPrice').textContent = total.toFixed(2);
     }
+    
+    // Add event listeners to all quantity inputs
+    document.addEventListener('DOMContentLoaded', function() {
+      var quantityInputs = document.querySelectorAll('input[name="quantity[]"]');
+      quantityInputs.forEach(function(input) {
+        input.addEventListener('input', updateTotal);
+        input.addEventListener('change', updateTotal);
+      });
+    });
   </script>
 {% endblock %}
 
