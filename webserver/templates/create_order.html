@@ -4,7 +4,7 @@
   <h1>Create Order for {{ restaurant.name }}</h1>
   <p><a href="/restaurants/{{ restaurant.id }}">← Back to Restaurant</a></p>
   
-  <p><strong>Logged in as:</strong> {{ current_user.username }} ({{ session.role }})</p>
+  <p><strong>Logged in as:</strong> {{ current_user.username if current_user else (session.username if session.username else 'Guest') }} ({{ session.role if session.role else 'N/A' }})</p>
   
   <form method="POST" id="orderForm">
     <h2>Select Dishes</h2>
@@ -21,31 +21,17 @@
         <tr>
           <td>{{ dish.name }}</td>
           <td>
-<<<<<<< Updated upstream
             {% if dish.price %}
               ${{ "%.2f"|format(dish.price) }}
             {% else %}
               <span style="color: #999;">Price not set</span>
             {% endif %}
-            <input type="hidden" name="price_{{ dish.id }}" value="{{ dish.price }}">
+            <input type="hidden" name="price_{{ dish.id }}" value="{{ dish.price if dish.price else '0.00' }}">
           </td>
           <td>
             <input type="number" name="quantity[]" min="0" value="0" 
                    onchange="updateTotal()">
             <input type="hidden" name="dish_id[]" value="{{ dish.id }}">
-=======
-            <input type="number" name="quantity[]" min="0" value="0">
-            <input type="hidden" name="dish_id[]" value="{{ dish.id }}">
-          </td>
-          <td>
-            {% if session.role == 'Admin' %}
-              <input type="number" name="price_{{ dish.id }}" step="0.01" min="0" 
-                     value="{{ dish.price if dish.price else '0.00' }}" required>
-            {% else %}
-              ${{ "%.2f"|format(dish.price if dish.price else 0.00) }}
-              <input type="hidden" name="price_{{ dish.id }}" value="{{ dish.price if dish.price else '0.00' }}">
-            {% endif %}
->>>>>>> Stashed changes
           </td>
         </tr>
         {% endfor %}
@@ -61,7 +47,6 @@
     </div>
   </form>
   
-<<<<<<< Updated upstream
   <script>
     function updateTotal() {
       var total = 0;
@@ -91,8 +76,5 @@
       });
     });
   </script>
-=======
-
->>>>>>> Stashed changes
 {% endblock %}
 

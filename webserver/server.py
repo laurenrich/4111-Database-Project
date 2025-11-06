@@ -782,10 +782,13 @@ def create_order(restaurant_id):
 				if quantity <= 0:
 					continue
 				
-				# Get dish price from orderitem (if exists) or set default
-				# For now, we'll need to get price from form or calculate
-				price_str = request.form.get(f'price_{dish_id}', '0')
-				price = float(price_str) if price_str else 0.0
+				# Get dish price from dish table (current price)
+				# This preserves the price at the time of order
+				price_query = "SELECT COALESCE(price, 0.0) FROM dish WHERE dishid = :dish_id;"
+				cursor = g.conn.execute(text(price_query), {'dish_id': dish_id})
+				price_result = cursor.fetchone()
+				price = float(price_result[0]) if price_result and price_result[0] else 0.0
+				cursor.close()
 				
 				order_items.append({
 					'dish_id': dish_id,
