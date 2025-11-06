@@ -31,12 +31,20 @@
     <table>
       <tr>
         <th>Name</th>
+        <th>Ingredients</th>
         <th>Price</th>
         <th>Actions</th>
       </tr>
       {% for d in dishes %}
       <tr>
         <td>{{ d.name }}</td>
+        <td>
+          {% if d.ingredients %}
+            {{ d.ingredients }}
+          {% else %}
+            <span style="color: #999;">No ingredients listed</span>
+          {% endif %}
+        </td>
         <td>
           {% if d.price %}
             ${{ "%.2f"|format(d.price) }}
@@ -46,6 +54,7 @@
         </td>
         <td>
           <a href="/dishes">View Details</a>
+          <a href="/dishes/{{ d.id }}/edit">Edit</a>
           <form method="POST" action="/dishes/{{ d.id }}/delete" style="display:inline;">
             <button type="submit" onclick="return confirm('Delete this dish?')">Delete</button>
           </form>

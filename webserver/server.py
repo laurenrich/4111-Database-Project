@@ -228,15 +228,16 @@ def restaurant_details(restaurant_id):
 			'address': restaurant[2] if restaurant[2] else 'N/A'
 		}
 		
-		# Get dishes for this restaurant (including price)
-		dishes_query = "SELECT dishid, name, COALESCE(price, 0.0) as price FROM dish WHERE restaurantid = :id ORDER BY name;"
+		# Get dishes for this restaurant (including price and ingredients)
+		dishes_query = "SELECT dishid, name, ingredients, COALESCE(price, 0.0) as price FROM dish WHERE restaurantid = :id ORDER BY name;"
 		cursor = g.conn.execute(text(dishes_query), {'id': restaurant_id})
 		dishes = []
 		for result in cursor:
 			dishes.append({
 				'id': result[0], 
 				'name': result[1],
-				'price': float(result[2]) if result[2] else None
+				'ingredients': result[2],
+				'price': float(result[3]) if result[3] else None
 			})
 		cursor.close()
 		
@@ -652,10 +653,19 @@ def add_dish(restaurant_id):
 		name = request.form.get('name', '').strip()
 		ingredients = request.form.get('ingredients', '').strip() or None
 		price_str = request.form.get('price', '').strip()
-		price = float(price_str) if price_str else None
 		
 		if not name:
 			return "Error: Dish name is required", 400
+		
+		if not price_str:
+			return "Error: Price is required", 400
+		
+		try:
+			price = float(price_str)
+			if price < 0:
+				return "Error: Price must be non-negative", 400
+		except ValueError:
+			return "Error: Invalid price format", 400
 		
 		try:
 			insert_query = """
@@ -1064,6 +1074,92 @@ def delete_review(review_id):
 		return redirect('/')
 	except Exception as e:
 		return f"Error deleting review: {e}", 500
+
+# Edit Dish (Admin only)
+@app.route('/dishes/<int:dish_id>/edit', methods=['GET', 'POST'])
+def edit_dish(dish_id):
+	check_result = require_login_check(required_roles=['Admin'])
+	if check_result:
+		return check_result
+	
+	g.conn.execute(text("SET search_path TO jcw2239, public;"))
+	
+	if request.method == 'POST':
+		name = request.form.get('name', '').strip()
+		ingredients = request.form.get('ingredients', '').strip() or None
+		price_str = request.form.get('price', '').strip()
+		
+		if not name:
+			return "Error: Dish name is required", 400
+		
+		if not price_str:
+			return "Error: Price is required", 400
+		
+		try:
+			price = float(price_str)
+			if price < 0:
+				return "Error: Price must be non-negative", 400
+		except ValueError:
+			return "Error: Invalid price format", 400
+		
+		try:
+			update_query = """
+			UPDATE dish 
+			SET name = :name, ingredients = :ingredients, price = :price
+			WHERE dishid = :dish_id
+			"""
+			g.conn.execute(text(update_query), {
+				'name': name,
+				'ingredients': ingredients,
+				'price': price,
+				'dish_id': dish_id
+			})
+			g.conn.commit()
+			
+			# Get restaurant ID to redirect back
+			rest_query = "SELECT restaurantid FROM dish WHERE dishid = :id;"
+			cursor = g.conn.execute(text(rest_query), {'id': dish_id})
+			result = cursor.fetchone()
+			restaurant_id = result[0] if result else None
+			cursor.close()
+			
+			if restaurant_id:
+				return redirect(f'/restaurants/{restaurant_id}')
+			return redirect('/restaurants')
+		except Exception as e:
+			return f"Error updating dish: {e}", 500
+	
+	# GET: Show edit form
+	try:
+		dish_query = """
+		SELECT d.dishid, d.name, d.ingredients, d.price, d.restaurantid, r.name as restaurant_name
+		FROM dish d
+		LEFT JOIN restaurant r ON d.restaurantid = r.restaurantid
+		WHERE d.dishid = :id
+		"""
+		cursor = g.conn.execute(text(dish_query), {'id': dish_id})
+		dish = cursor.fetchone()
+		cursor.close()
+		
+		if not dish:
+			return "Dish not found", 404
+		
+		dish_info = {
+			'id': dish[0],
+			'name': dish[1],
+			'ingredients': dish[2] or '',
+			'price': float(dish[3]) if dish[3] else 0.0,
+			'restaurant_id': dish[4],
+			'restaurant_name': dish[5]
+		}
+		
+		context = dict(
+			dish=dish_info,
+			current_user={'id': session.get('user_id'), 'username': session.get('username')}
+		)
+		return render_template("edit_dish.html", **context)
+	except Exception as e:
+		return f"Error: {e}", 500
 
 # Edit Order (Customer can edit their own orders, Admin can edit any)
 @app.route('/orders/<int:order_id>/edit', methods=['GET', 'POST'])

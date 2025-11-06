@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+
+{% block content %}
+  <h1>Edit Dish - {{ dish.name }}</h1>
+  <p><a href="/restaurants/{{ dish.restaurant_id }}">← Back to {{ dish.restaurant_name }}</a></p>
+  
+  <p><strong>Logged in as:</strong> {{ current_user.username }} (Admin)</p>
+  
+  <form method="POST">
+    <div>
+      <label for="name">Dish Name:</label>
+      <input type="text" name="name" id="name" value="{{ dish.name }}" required>
+    </div>
+    
+    <div>
+      <label for="ingredients">Ingredients:</label>
+      <textarea name="ingredients" id="ingredients" rows="4">{{ dish.ingredients }}</textarea>
+    </div>
+    
+    <div>
+      <label for="price">Price ($):</label>
+      <input type="number" name="price" id="price" step="0.01" min="0" value="{{ dish.price }}" required>
+      <small style="color: #666;">(required)</small>
+    </div>
+    
+    <div>
+      <button type="submit">Update Dish</button>
+      <a href="/restaurants/{{ dish.restaurant_id }}">Cancel</a>
+    </div>
+  </form>
+{% endblock %}
