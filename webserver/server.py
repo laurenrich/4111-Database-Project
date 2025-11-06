@@ -1065,6 +1065,152 @@ def delete_review(review_id):
 	except Exception as e:
 		return f"Error deleting review: {e}", 500
 
+# Edit Order (Customer can edit their own orders, Admin can edit any)
+@app.route('/orders/<int:order_id>/edit', methods=['GET', 'POST'])
+def edit_order(order_id):
+	check_result = require_login_check(required_roles=['Admin', 'Cust'])
+	if check_result:
+		return check_result
+	
+	g.conn.execute(text("SET search_path TO jcw2239, public;"))
+	
+	user_id = session.get('user_id')
+	user_role = session.get('role')
+	
+	# Check if user can edit this order (own order or admin)
+	if user_role != 'Admin':
+		order_check = "SELECT userid FROM orders WHERE orderid = :id;"
+		cursor = g.conn.execute(text(order_check), {'id': order_id})
+		result = cursor.fetchone()
+		cursor.close()
+		if not result or result[0] != user_id:
+			return "Access denied: You can only edit your own orders", 403
+	
+	if request.method == 'POST':
+		try:
+			# Get form data
+			dish_ids = request.form.getlist('dish_id[]')
+			quantities = request.form.getlist('quantity[]')
+			
+			# Calculate new total
+			total_price = 0
+			order_items = []
+			
+			for dish_id_str, quantity_str in zip(dish_ids, quantities):
+				if not dish_id_str or not quantity_str:
+					continue
+				dish_id = int(dish_id_str)
+				quantity = int(quantity_str)
+				
+				if quantity <= 0:
+					continue
+				
+				# Get current dish price
+				price_query = "SELECT COALESCE(price, 0.0) FROM dish WHERE dishid = :dish_id;"
+				cursor = g.conn.execute(text(price_query), {'dish_id': dish_id})
+				price_result = cursor.fetchone()
+				price = float(price_result[0]) if price_result and price_result[0] else 0.0
+				cursor.close()
+				
+				order_items.append({
+					'dish_id': dish_id,
+					'quantity': quantity,
+					'price': price
+				})
+				total_price += price * quantity
+			
+			if not order_items:
+				return "Error: At least one dish with quantity > 0 is required", 400
+			
+			# Delete existing order items
+			delete_items = "DELETE FROM orderitem WHERE orderid = :order_id;"
+			g.conn.execute(text(delete_items), {'order_id': order_id})
+			
+			# Update order total
+			update_order = "UPDATE orders SET totalprice = :total WHERE orderid = :order_id;"
+			g.conn.execute(text(update_order), {'total': total_price, 'order_id': order_id})
+			
+			# Insert new order items
+			for item in order_items:
+				item_query = """
+				INSERT INTO orderitem (orderid, dishid, quantity, price)
+				VALUES (:order_id, :dish_id, :quantity, :price);
+				"""
+				g.conn.execute(text(item_query), {
+					'order_id': order_id,
+					'dish_id': item['dish_id'],
+					'quantity': item['quantity'],
+					'price': item['price']
+				})
+			
+			g.conn.commit()
+			
+			return redirect(f'/orders/{order_id}')
+		except Exception as e:
+			return f"Error updating order: {e}", 500
+	
+	# GET: Show edit form
+	try:
+		# Get order info
+		order_query = """
+		SELECT o.orderid, o.userid, o.restaurantid, o.totalprice,
+		       r.name as restaurant_name
+		FROM orders o
+		LEFT JOIN restaurant r ON o.restaurantid = r.restaurantid
+		WHERE o.orderid = :id;
+		"""
+		cursor = g.conn.execute(text(order_query), {'id': order_id})
+		order = cursor.fetchone()
+		cursor.close()
+		
+		if not order:
+			return "Order not found", 404
+		
+		restaurant_id = order[2]
+		
+		# Get current order items
+		items_query = """
+		SELECT oi.dishid, oi.quantity, d.name as dish_name
+		FROM orderitem oi
+		LEFT JOIN dish d ON oi.dishid = d.dishid
+		WHERE oi.orderid = :id;
+		"""
+		cursor = g.conn.execute(text(items_query), {'id': order_id})
+		current_items = {}
+		for result in cursor:
+			current_items[result[0]] = {
+				'quantity': result[1],
+				'name': result[2]
+			}
+		cursor.close()
+		
+		# Get all dishes for this restaurant
+		dishes_query = """
+		SELECT dishid, name, COALESCE(price, 0.0) as price
+		FROM dish 
+		WHERE restaurantid = :id 
+		ORDER BY name;
+		"""
+		cursor = g.conn.execute(text(dishes_query), {'id': restaurant_id})
+		dishes = []
+		for row in cursor:
+			dishes.append({
+				'id': row[0], 
+				'name': row[1],
+				'price': float(row[2]) if row[2] else 0.0,
+				'current_quantity': current_items.get(row[0], {}).get('quantity', 0)
+			})
+		cursor.close()
+		
+		context = dict(
+			order={'id': order[0], 'restaurant_name': order[4]}, 
+			dishes=dishes,
+			current_user={'id': session.get('user_id'), 'username': session.get('username')}
+		)
+		return render_template("edit_order.html", **context)
+	except Exception as e:
+		return f"Error: {e}", 500
+
 # Require login wrapper function
 def require_login_check(required_roles=None):
 	"""Check if user is logged in and has required role"""

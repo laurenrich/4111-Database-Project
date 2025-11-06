@@ -6,7 +6,7 @@
   <p><strong>Restaurant:</strong> <a href="/restaurants/{{ order.restaurant_id }}">{{ order.restaurant_name }}</a></p>
   <p><strong>Total Amount:</strong> {{ order.total }}</p>
   
-  <p><a href="/orders">← Back to Orders</a></p>
+  <p><a href="/orders">← Back to Orders</a> | <a href="/orders/{{ order.id }}/edit">Edit Order</a></p>
   
   <h2>Order Items</h2>
   {% if items|length == 0 %}

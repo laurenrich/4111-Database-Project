@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+
+{% block content %}
+  <h1>Edit Order - {{ order.restaurant_name }}</h1>
+  
+  <form method="POST" id="orderForm">
+    <h2>Select Dishes and Quantities</h2>
+    
+    {% if dishes|length == 0 %}
+      <p>No dishes available for this restaurant.</p>
+    {% else %}
+      <table>
+        <tr>
+          <th>Dish</th>
+          <th>Price</th>
+          <th>Quantity</th>
+          <th>Subtotal</th>
+        </tr>
+        {% for dish in dishes %}
+        <tr>
+          <td>{{ dish.name }}</td>
+          <td>${{ "%.2f"|format(dish.price) }}</td>
+          <td>
+            <input type="hidden" name="dish_id[]" value="{{ dish.id }}">
+            <input type="number" name="quantity[]" value="{{ dish.current_quantity }}" 
+                   min="0" max="99" class="quantity-input" data-price="{{ dish.price }}">
+          </td>
+          <td class="subtotal">$0.00</td>
+        </tr>
+        {% endfor %}
+      </table>
+      
+      <div style="margin-top: 20px;">
+        <strong>Total: $<span id="total">0.00</span></strong>
+      </div>
+      
+      <div style="margin-top: 20px;">
+        <button type="submit">Update Order</button>
+        <a href="/orders/{{ order.id }}">Cancel</a>
+      </div>
+    {% endif %}
+  </form>
+
+  <script>
+    // Calculate totals when quantities change
+    function updateTotals() {
+      let total = 0;
+      const rows = document.querySelectorAll('tr');
+      
+      rows.forEach(row => {
+        const quantityInput = row.querySelector('.quantity-input');
+        const subtotalCell = row.querySelector('.subtotal');
+        
+        if (quantityInput && subtotalCell) {
+          const quantity = parseInt(quantityInput.value) || 0;
+          const price = parseFloat(quantityInput.dataset.price) || 0;
+          const subtotal = quantity * price;
+          
+          subtotalCell.textContent = '$' + subtotal.toFixed(2);
+          total += subtotal;
+        }
+      });
+      
+      document.getElementById('total').textContent = total.toFixed(2);
+    }
+    
+    // Add event listeners to quantity inputs
+    document.querySelectorAll('.quantity-input').forEach(input => {
+      input.addEventListener('input', updateTotals);
+    });
+    
+    // Calculate initial totals
+    updateTotals();
+  </script>
+{% endblock %}
