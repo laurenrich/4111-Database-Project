@@ -4,7 +4,7 @@
 **PostgreSQL Account:** jcw2239
 
 ## Web Application URL
-**URL:** http://127.0.0.1:8111
+**URL:** http://35.237.109.201:8111/
 
 **Note:** To test admin functionality and sample customer functionality:
 - **Admin:** lar2250 / passwordfisijc
