@@ -7,6 +7,18 @@
 - **Team Member 2 UNI:** lar2250
 - **PostgreSQL Account (UNI):** jwc2239
 
+All three features described below were not present in our Part 3 schema and are new additions for Part 4 as required.
+
+---
+
+## Schema Objects Added
+
+- GIN index `idx_review_comment_fts` on review(comment)
+- New column `dish.allergens TEXT[]`
+- New column `restaurant.total_orders INTEGER DEFAULT 0`
+- Trigger function `update_restaurant_order_count()`
+- Trigger `trigger_update_order_count` on orders
+
 ---
 
 ## Full Text Search
@@ -19,6 +31,8 @@
 - Used PostgreSQL's built-in text search functions (`to_tsvector`, `to_tsquery`, `ts_rank`)
 
 **Rationale:** This addition integrates naturally with our restaurant database because restaurant descriptions inherently contain document-style text with rich semantic content about cuisine, atmosphere, service quality, and dining experience. Full-text search enables semantic search capabilities beyond exact string matching, ranking results by relevance, advanced query capabilities with boolean operators, and efficient searching through large volumes of descriptive text. This feature is valuable for users to find restaurants based on specific characteristics like "authentic Italian" or "fresh ingredients" or "romantic atmosphere", helping them discover restaurants that match their preferences and dining needs.
+
+Ten reviews in our live database have been updated with paragraph-length comment text to support full-text search.
 
 ---
 
@@ -33,6 +47,8 @@
 - Each dish has 0-5 allergens based on realistic ingredient combinations
 
 **Rationale:** This modification fits perfectly within our restaurant database structure because dishes naturally contain multiple allergens, making arrays the ideal data structure. It avoids creating separate allergen tables, enables efficient queries using array operators, supports critical functionality for customers with dietary restrictions, allows restaurants to quickly filter menu items based on allergen requirements, and facilitates compliance with food safety regulations requiring allergen disclosure.
+
+Ten dishes in our live database have been updated with meaningful allergen arrays.
 
 ---
 
@@ -130,24 +146,4 @@ FROM dish d
 LEFT JOIN restaurant r ON d.restaurantid = r.restaurantid
 WHERE d.allergens @> ARRAY['dairy']::TEXT[]
 ORDER BY d.name;
-```
-
----
-
-### Query 3: Trigger Functionality
-**Purpose:** Display restaurants with their cached total_orders count maintained by the trigger.
-
-**What it computes:** This query shows how the trigger maintains the `total_orders` column by displaying restaurants along with their automatically-updated order counts. The `total_orders` value is kept current by the trigger whenever new orders are inserted.
-
-**Query:**
-```sql
-SELECT 
-    r.restaurantid,
-    r.name AS restaurant_name,
-    r.total_orders,
-    r.location,
-    r.pricerange
-FROM restaurant r
-WHERE r.total_orders > 0
-ORDER BY r.total_orders DESC;
 ```
