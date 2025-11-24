@@ -11,14 +11,14 @@
 
 ## Full Text Search
 
-**Schema Modification:** We enhanced the existing `comment` column in the `review` table to support full-text search capabilities. The column was already of type TEXT, making it suitable for document-style content.
+**Schema Modification:** We added a new `description TEXT` column to the `restaurant` table using `ALTER TABLE restaurant ADD COLUMN description TEXT;` to support full-text search capabilities on document-style content.
 
 **Implementation Details:**
-- Created a GIN index on the text search vector: `CREATE INDEX idx_review_comment_fts ON review USING gin(to_tsvector('english', comment));`
-- Populated at least 10 reviews with detailed, paragraph-length text containing natural language content
+- Created a GIN index on the text search vector: `CREATE INDEX idx_restaurant_description_fulltext ON restaurant USING gin(to_tsvector('english', description));`
+- Populated at least 10 restaurants with detailed, paragraph-length descriptions containing natural language content about each restaurant's history, ambiance, specialties, and dining experience
 - Used PostgreSQL's built-in text search functions (`to_tsvector`, `to_tsquery`, `ts_rank`)
 
-**Rationale:** This addition integrates naturally with our restaurant database because customer reviews inherently contain document-style text with rich semantic content. Full-text search enables semantic search capabilities beyond exact string matching, ranking results by relevance, advanced query capabilities with boolean operators, and efficient searching through large volumes of review text. This feature is valuable for restaurant owners to analyze customer feedback, identify common themes, and understand customer sentiment patterns.
+**Rationale:** This addition integrates naturally with our restaurant database because restaurant descriptions inherently contain document-style text with rich semantic content about cuisine, atmosphere, service quality, and dining experience. Full-text search enables semantic search capabilities beyond exact string matching, ranking results by relevance, advanced query capabilities with boolean operators, and efficient searching through large volumes of descriptive text. This feature is valuable for users to find restaurants based on specific characteristics like "authentic Italian" or "fresh ingredients" or "romantic atmosphere", helping them discover restaurants that match their preferences and dining needs.
 
 ---
 
@@ -93,22 +93,20 @@ The `total_orders` value should have increased by 1 compared to before the INSER
 ## Queries
 
 ### Query 1: Full-Text Search
-**Purpose:** Find reviews that mention "fresh ingredients" OR "exceptional service" using full-text search capabilities.
+**Purpose:** Find restaurants that mention "authentic" OR "fresh" OR "traditional" in their descriptions using full-text search capabilities.
 
-**What it computes:** This query searches the `comment` column for reviews containing words related to "fresh ingredients" or "exceptional service". It uses PostgreSQL's `to_tsvector` and `to_tsquery` functions with the 'english' configuration. The results are ranked by relevance score using `ts_rank`, showing the most relevant reviews first.
+**What it computes:** This query searches the `description` column for restaurants containing words related to "authentic", "fresh", or "traditional". It uses PostgreSQL's `to_tsvector` and `to_tsquery` functions with the 'english' configuration. The results are ranked by relevance score using `ts_rank`, showing the most relevant restaurants first.
 
 **Query:**
 ```sql
 SELECT 
-    r.reviewid,
-    r.rating,
-    rest.name AS restaurant_name,
-    ts_rank(to_tsvector('english', r.comment), 
-            to_tsquery('english', 'fresh & ingredients | exceptional & service')) AS relevance_score,
-    substring(r.comment, 1, 150) AS review_preview
-FROM review r
-LEFT JOIN restaurant rest ON r.restaurantid = rest.restaurantid
-WHERE to_tsvector('english', r.comment) @@ to_tsquery('english', 'fresh & ingredients | exceptional & service')
+    restaurantid,
+    name AS restaurant_name,
+    ts_rank(to_tsvector('english', description), 
+            to_tsquery('english', 'authentic | fresh | traditional')) AS relevance_score,
+    substring(description, 1, 150) AS description_preview
+FROM restaurant
+WHERE to_tsvector('english', description) @@ to_tsquery('english', 'authentic | fresh | traditional')
 ORDER BY relevance_score DESC;
 ```
 
