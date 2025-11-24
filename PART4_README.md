@@ -32,8 +32,7 @@ All three features described below were not present in our Part 3 schema and are
 
 **Rationale:** This addition integrates naturally with our restaurant database because restaurant descriptions inherently contain document-style text with rich semantic content about cuisine, atmosphere, service quality, and dining experience. Full-text search enables semantic search capabilities beyond exact string matching, ranking results by relevance, advanced query capabilities with boolean operators, and efficient searching through large volumes of descriptive text. This feature is valuable for users to find restaurants based on specific characteristics like "authentic Italian" or "fresh ingredients" or "romantic atmosphere", helping them discover restaurants that match their preferences and dining needs.
 
-Ten reviews in our live database have been updated with paragraph-length comment text to support full-text search.
-
+Ten restaurants in our live database have been updated with paragraph-length description text to support full-text search.
 ---
 
 ## Array Attribute
