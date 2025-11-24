@@ -11,21 +11,56 @@
 
 ## Full Text Search
 
-We implemented full text search functionality on the existing comment column in the review table. The comment column was of type TEXT, so it was suitable for storing document-style text. We used a GIN index on the text search vector of the comment column and made sure at least 10 reviews were populated with detailed, paragraph-length text. This addition makes sense because reviews naturally contain document-style text when users write their feedback, and the full-text search allows semantic search capabilities which allows users to find reviews based on meaning rather than exact string matching. This is useful for analyzing customer feedback and identifying common themes in reviews.
+**Schema Modification:** We enhanced the existing `comment` column in the `review` table to support full-text search capabilities. The column was already of type TEXT, making it suitable for document-style content.
+
+**Implementation Details:**
+- Created a GIN index on the text search vector: `CREATE INDEX idx_review_comment_fts ON review USING gin(to_tsvector('english', comment));`
+- Populated at least 10 reviews with detailed, paragraph-length text containing natural language content
+- Used PostgreSQL's built-in text search functions (`to_tsvector`, `to_tsquery`, `ts_rank`)
+
+**Rationale:** This addition integrates naturally with our restaurant database because customer reviews inherently contain document-style text with rich semantic content. Full-text search enables semantic search capabilities beyond exact string matching, ranking results by relevance, advanced query capabilities with boolean operators, and efficient searching through large volumes of review text. This feature is valuable for restaurant owners to analyze customer feedback, identify common themes, and understand customer sentiment patterns.
 
 ---
 
 ## Array Attribute
 
-We added an 'allergens TEXT[]' column to the existing dish table. This array stores the allergens that may be present in each dish, for example, 'dairy', 'gluten', 'peanuts', 'shellfish', 'eggs', 'soy'. This addition works well with the structure of our project because many dishes contain multiple allergens and an array is a natural way to store this. It also supports quick look up to find dishes with or without specific allergens, which is helpful for customers with diets or food allergies/dietary restrictions. This is very common and useful for customer service in a restaurant database system.
+**Schema Modification:** We added an `allergens TEXT[]` column to the existing `dish` table using `ALTER TABLE dish ADD COLUMN allergens TEXT[];`
+
+**Implementation Details:**
+- Array stores multiple allergen values per dish (e.g., `{'dairy', 'gluten', 'nuts'}`)
+- Updated all existing dishes with appropriate allergen arrays
+- Common allergens include: 'dairy', 'gluten', 'peanuts', 'tree nuts', 'shellfish', 'fish', 'eggs', 'soy', 'sesame'
+- Each dish has 0-5 allergens based on realistic ingredient combinations
+
+**Rationale:** This modification fits perfectly within our restaurant database structure because dishes naturally contain multiple allergens, making arrays the ideal data structure. It avoids creating separate allergen tables, enables efficient queries using array operators, supports critical functionality for customers with dietary restrictions, allows restaurants to quickly filter menu items based on allergen requirements, and facilitates compliance with food safety regulations requiring allergen disclosure.
 
 ---
 
 ## Trigger
 
-We created a trigger that automatically maintains the 'total_orders' count in the restaurant table. When a new order is inserted into the orders table, the trigger increments the 'total_orders' counter for the corresponding restaurant. This improves query performance by avoiding repeated COUNT(*) calculations when displaying order statistics.
+**Schema Modification:** We implemented a trigger system to automatically maintain order statistics by adding `total_orders INTEGER DEFAULT 0` column to the `restaurant` table, creating a PL/pgSQL function, and creating an AFTER INSERT trigger on the `orders` table.
 
-**Note:** We added the 'total_orders' column to the restaurant table as part of this feature. The trigger automatically maintains this cached value whenever orders are added.
+**Implementation Details:**
+```sql
+ALTER TABLE restaurant ADD COLUMN total_orders INTEGER DEFAULT 0;
+
+CREATE OR REPLACE FUNCTION update_restaurant_order_count()
+RETURNS TRIGGER AS $$
+BEGIN
+    UPDATE restaurant 
+    SET total_orders = total_orders + 1 
+    WHERE restaurantid = NEW.restaurantid;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trigger_update_order_count
+    AFTER INSERT ON orders
+    FOR EACH ROW
+    EXECUTE FUNCTION update_restaurant_order_count();
+```
+
+**Rationale:** This trigger provides performance optimization by eliminating expensive COUNT(*) operations, ensures data consistency by automatically maintaining accurate order counts, enables real-time updates when new orders are placed, supports business intelligence for restaurant popularity analysis, and maintains scalability with constant-time access to order counts regardless of database size.
 
 ### Trigger Execution Example
 
@@ -97,4 +132,24 @@ FROM dish d
 LEFT JOIN restaurant r ON d.restaurantid = r.restaurantid
 WHERE d.allergens @> ARRAY['dairy']::TEXT[]
 ORDER BY d.name;
+```
+
+---
+
+### Query 3: Trigger Functionality
+**Purpose:** Display restaurants with their cached total_orders count maintained by the trigger.
+
+**What it computes:** This query shows how the trigger maintains the `total_orders` column by displaying restaurants along with their automatically-updated order counts. The `total_orders` value is kept current by the trigger whenever new orders are inserted.
+
+**Query:**
+```sql
+SELECT 
+    r.restaurantid,
+    r.name AS restaurant_name,
+    r.total_orders,
+    r.location,
+    r.pricerange
+FROM restaurant r
+WHERE r.total_orders > 0
+ORDER BY r.total_orders DESC;
 ```
