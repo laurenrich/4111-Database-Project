@@ -149,23 +149,3 @@ LEFT JOIN restaurant r ON d.restaurantid = r.restaurantid
 WHERE d.allergens @> ARRAY['dairy']::TEXT[]
 ORDER BY d.name;
 ```
-
----
-
-### Query 3: Trigger Functionality
-**Purpose:** Display restaurants with their cached total_orders count maintained by the trigger.
-
-**What it computes:** This query shows how the trigger maintains the `total_orders` column by displaying restaurants along with their automatically-updated order counts. The `total_orders` value is kept current by the trigger whenever new orders are inserted.
-
-**Query:**
-```sql
-SELECT 
-    r.restaurantid,
-    r.name AS restaurant_name,
-    r.total_orders,
-    r.location,
-    r.pricerange
-FROM restaurant r
-WHERE r.total_orders > 0
-ORDER BY r.total_orders DESC;
-```
