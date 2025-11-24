@@ -13,7 +13,8 @@ All three features described below were not present in our Part 3 schema and are
 
 ## Schema Objects Added
 
-- GIN index `idx_review_comment_fts` on review(comment)
+- New column `restaurant.description TEXT`
+- GIN index `idx_restaurant_description_fulltext` on restaurant(description)
 - New column `dish.allergens TEXT[]`
 - New column `restaurant.total_orders INTEGER DEFAULT 0`
 - Trigger function `update_restaurant_order_count()`
@@ -32,7 +33,6 @@ All three features described below were not present in our Part 3 schema and are
 
 **Rationale:** This addition integrates naturally with our restaurant database because restaurant descriptions inherently contain document-style text with rich semantic content about cuisine, atmosphere, service quality, and dining experience. Full-text search enables semantic search capabilities beyond exact string matching, ranking results by relevance, advanced query capabilities with boolean operators, and efficient searching through large volumes of descriptive text. This feature is valuable for users to find restaurants based on specific characteristics like "authentic Italian" or "fresh ingredients" or "romantic atmosphere", helping them discover restaurants that match their preferences and dining needs.
 
-Ten restaurants in our live database have been updated with paragraph-length description text to support full-text search.
 ---
 
 ## Array Attribute
@@ -110,13 +110,14 @@ The `total_orders` value should have increased by 1 compared to before the INSER
 ### Query 1: Full-Text Search
 **Purpose:** Find restaurants that mention "authentic" OR "fresh" OR "traditional" in their descriptions using full-text search capabilities.
 
-**What it computes:** This query searches the `description` column for restaurants containing words related to "authentic", "fresh", or "traditional". It uses PostgreSQL's `to_tsvector` and `to_tsquery` functions with the 'english' configuration. The results are ranked by relevance score using `ts_rank`, showing the most relevant restaurants first.
+**What it computes:** This query searches the `description` column for restaurants containing words related to "authentic", "fresh", or "traditional". It uses PostgreSQL's `to_tsvector` and `to_tsquery` functions with the 'english' configuration. The results are ranked by relevance score using `ts_rank`, showing the most relevant restaurants first. The query also includes the `total_orders` column which is maintained by our trigger system.
 
 **Query:**
 ```sql
 SELECT 
     restaurantid,
     name AS restaurant_name,
+    total_orders,
     ts_rank(to_tsvector('english', description), 
             to_tsquery('english', 'authentic | fresh | traditional')) AS relevance_score,
     substring(description, 1, 150) AS description_preview
